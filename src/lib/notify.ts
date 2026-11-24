@@ -1,0 +1,82 @@
+import { supabase } from './supabase';
+
+type ToastKind = 'info' | 'success' | 'error' | 'alert';
+export interface ToastItem { id: number; text: string; kind: ToastKind }
+
+type Listener = (t: ToastItem) => void;
+const listeners = new Set<Listener>();
+let seq = 0;
+
+export function onToast(fn: Listener): () => void {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
+
+export function toast(text: string, kind: ToastKind = 'info') {
+  const item = { id: ++seq, text, kind };
+  listeners.forEach((l) => l(item));
+}
+
+/** Silent in-class alert: vibration + toast, and a system notification if the tab is hidden. */
+export async function alertIncoming(title: string, body: string, tag: string) {
+  try {
+    navigator.vibrate?.([70, 40, 70]);
+  } catch {
+    /* iOS Safari has no vibrate */
+  }
+  toast(`${title} · ${body}`, 'alert');
+  if (document.visibilityState === 'hidden' && 'Notification' in window && Notification.permission === 'granted') {
+    const reg = await navigator.serviceWorker?.getRegistration();
+    reg?.showNotification(title, { body, tag, icon: '/icons/icon-192.png', dir: 'rtl', lang: 'he' });
+  }
+}
+
+export async function registerServiceWorker() {
+  if (!('serviceWorker' in navigator) || import.meta.env.DEV) return;
+  try {
+    await navigator.serviceWorker.register('/sw.js');
+  } catch (e) {
+    console.warn('SW registration failed', e);
+  }
+}
+
+export async function requestNotificationPermission(): Promise<NotificationPermission | 'unsupported'> {
+  if (!('Notification' in window)) return 'unsupported';
+  if (Notification.permission !== 'default') return Notification.permission;
+  try {
+    return await Notification.requestPermission();
+  } catch {
+    return 'denied';
+  }
+}
+
+function urlBase64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
+  const padding = '='.repeat((4 - (base64.length % 4)) % 4);
+  const raw = atob((base64 + padding).replace(/-/g, '+').replace(/_/g, '/'));
+  const out = new Uint8Array(new ArrayBuffer(raw.length));
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+
+/** Subscribes to Web Push (only if a VAPID key is configured) and stores the subscription. */
+export async function subscribeToPush(userId: string) {
+  const vapid = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined;
+  if (!vapid || !('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  if (Notification.permission !== 'granted') return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub =
+      (await reg.pushManager.getSubscription()) ??
+      (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(vapid) }));
+    const json = sub.toJSON();
+    if (!json.endpoint || !json.keys) return;
+    await supabase.from('push_subscriptions').upsert({
+      endpoint: json.endpoint,
+      user_id: userId,
+      p256dh: json.keys.p256dh,
+      auth: json.keys.auth,
+    });
+  } catch (e) {
+    console.warn('push subscribe failed', e);
+  }
+}
