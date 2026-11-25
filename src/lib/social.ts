@@ -33,6 +33,28 @@ export const kindLabel: Record<RequestKind, string> = {
   chat: 'צ׳אט',
 };
 
+export const APP_URL = 'https://konekt-nu.vercel.app';
+const INVITE_TEXT = 'היי! אני על KONEKT: רואים מי נמצא סביבך עכשיו בקמפוס ומתחברים בקליק. פשוט תתחברו 👇';
+
+/** Mobile: native share sheet. Elsewhere (or if sharing fails): copy the invite and say so. */
+export async function inviteNearby(notify: (text: string, kind: 'success' | 'error') => void): Promise<void> {
+  try {
+    if (typeof navigator.share === 'function') {
+      await navigator.share({ text: INVITE_TEXT, url: APP_URL });
+      return;
+    }
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'AbortError') return; // user closed the sheet
+  }
+  try {
+    await navigator.clipboard.writeText(`${INVITE_TEXT}
+${APP_URL}`);
+    notify('ההזמנה הועתקה — אפשר להדביק ולשלוח', 'success');
+  } catch {
+    notify('לא הצלחנו להעתיק את ההזמנה', 'error');
+  }
+}
+
 export function whatsappInviteUrl(): string {
   const text = `היי! אני על KONEKT — רואים מי נמצא סביבך עכשיו בקמפוס ומתחברים בקליק. פשוט תתחברו 👇\n${window.location.origin}`;
   return `https://wa.me/?text=${encodeURIComponent(text)}`;

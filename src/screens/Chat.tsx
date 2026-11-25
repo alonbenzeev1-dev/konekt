@@ -13,6 +13,8 @@ interface Props {
   onBack: () => void;
 }
 
+const ICEBREAKERS = ['היי! גם אתה בהרצאה עכשיו?', 'ראיתי אותך ברדאר, בא לך קפה בהפסקה?', 'נעים להכיר! באיזה חוג ושנה אתה?'];
+
 export function Chat({ myId, chatId, inbox, onBack }: Props) {
   const now = useNow(30_000);
   const [text, setText] = useState('');
@@ -42,15 +44,15 @@ export function Chat({ myId, chatId, inbox, onBack }: Props) {
     return () => window.removeEventListener('popstate', onPop);
   }, [chatId]);
 
-  const send = async () => {
-    const v = text.trim();
+  const sendText = async (v: string) => {
     if (!v || sending || !open) return;
     setSending(true);
     const { error } = await inbox.sendMessage(chatId, v);
     setSending(false);
     if (error) toast('ההודעה לא נשלחה — ייתכן שהצ׳אט נסגר', 'error');
-    else setText('');
+    else if (v === text.trim()) setText('');
   };
+  const send = () => sendText(text.trim());
 
   const block = async () => {
     if (!thread || !window.confirm(`לחסום את ${name}? הצ׳אט יימחק ולא תראו זה את זה יותר.`)) return;
@@ -107,12 +109,31 @@ export function Chat({ myId, chatId, inbox, onBack }: Props) {
         <div ref={endRef} />
       </main>
 
+      {open && msgs.length === 0 && (
+        <div className="border-t border-line bg-card px-3 pt-2.5">
+          <p className="mb-1.5 text-[11px] font-bold text-muted">פתיחה בקליק אחד</p>
+          <div className="flex flex-wrap gap-1.5">
+            {ICEBREAKERS.map((m) => (
+              <button
+                key={m}
+                type="button"
+                disabled={sending}
+                onClick={() => void sendText(m)}
+                className="rounded-full border border-primary/30 bg-primary-soft px-3 py-1.5 text-start text-[13px] font-semibold text-primary transition-transform active:scale-[0.97] disabled:opacity-50"
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <form
         onSubmit={(e) => {
           e.preventDefault();
           void send();
         }}
-        className="flex items-end gap-2 border-t border-line bg-card px-3 pt-2.5 safe-bottom"
+        className={`flex items-end gap-2 bg-card px-3 pt-2.5 safe-bottom ${open && msgs.length === 0 ? '' : 'border-t border-line'}`}
       >
         <textarea
           rows={1}

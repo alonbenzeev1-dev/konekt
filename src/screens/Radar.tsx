@@ -1,11 +1,11 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { ArrowUpLeft, Check, Clock, EyeOff, Instagram, Linkedin, Loader2, MapPinOff, MessageCircle, Send, Users } from 'lucide-react';
+import { ArrowUpLeft, Check, Clock, EyeOff, Instagram, Linkedin, Loader2, MapPinOff, MessageCircle, Send, UserPlus, Users } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
 import { BottomSheet } from '../components/BottomSheet';
 import { useConnectionLink } from '../hooks/useConnectionLink';
 import { CAMPUS_RADIUS_M, FEW_PEOPLE, RADIUS_M } from '../hooks/useNearby';
 import { toast } from '../lib/notify';
-import { kindLabel, whatsappInviteUrl } from '../lib/social';
+import { inviteNearby, kindLabel } from '../lib/social';
 import type { GeoStatus } from '../hooks/usePresence';
 import type { Inbox } from '../hooks/useInbox';
 import type { ConnectionRequest, NearbyUser, Platform, RequestKind } from '../lib/types';
@@ -85,7 +85,15 @@ export function Radar({ myId, visible, onShow, geo, accuracy, users, campusCount
               ))}
             </ul>
           )}
-          {users.length < FEW_PEOPLE && <FewPeople count={users.length} campusCount={campusCount} />}
+          {users.length === 0 && <EmptyRadar campusCount={campusCount} />}
+          {users.length > 0 && users.length < FEW_PEOPLE && (
+            <button
+              onClick={() => void inviteNearby(toast)}
+              className="mx-auto mt-3 flex items-center gap-1.5 text-xs font-bold text-primary active:opacity-70"
+            >
+              <UserPlus size={14} /> הזמן את מי שלידך
+            </button>
+          )}
         </>
       )}
 
@@ -107,44 +115,28 @@ export function Radar({ myId, visible, onShow, geo, accuracy, users, campusCount
   );
 }
 
-/** Empty state: fewer than 3 people within 75m → campus-wide count + WhatsApp invite. */
-function FewPeople({ count, campusCount }: { count: number; campusCount: number | null }) {
+/** Nobody within 75m: explain why and make inviting one tap. */
+function EmptyRadar({ campusCount }: { campusCount: number | null }) {
   return (
-    <div className={`card rounded-3xl p-5 text-center anim-card ${count > 0 ? 'mt-4' : ''}`}>
+    <div className="card rounded-3xl p-5 text-center anim-card">
       <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-live-soft text-live">
         <Users size={22} />
       </div>
-      <h3 className="text-base font-bold text-ink">{count === 0 ? 'שקט כאן כרגע' : 'עוד קצת ומתחילים'}</h3>
-      {campusCount != null && campusCount > 0 ? (
-        <p className="mt-1.5 text-sm text-muted">
-          <span className="inline-flex items-center gap-1.5 font-bold text-ink">
-            <span className="h-2 w-2 rounded-full bg-live anim-live" />
-            {campusCount} פעילים עכשיו בקמפוס
-          </span>
-          <br />
-          ברדיוס {CAMPUS_RADIUS_M / 1000} ק״מ ממך
-        </p>
-      ) : (
-        <p className="mt-1.5 text-sm text-muted">עוד אין פעילים בקמפוס. תהיו הראשונים להזמין.</p>
-      )}
-      <a
-        href={whatsappInviteUrl()}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#25D366] py-3 text-[15px] font-bold text-white shadow-md active:scale-[0.98]"
+      <h3 className="text-base font-bold text-ink">אף אחד לידך עוד לא פתח את הרדאר</h3>
+      <p className="mt-1.5 text-sm leading-relaxed text-muted">
+        {campusCount != null && campusCount > 0
+          ? `${campusCount} פעילים עכשיו בקמפוס, ברדיוס ${CAMPUS_RADIUS_M / 1000} ק״מ ממך. `
+          : ''}
+        הרדאר עובד כשחברים פותחים אותו. תזמינו את מי שיושב לידכם ותתחברו.
+      </p>
+      <button
+        onClick={() => void inviteNearby(toast)}
+        className="btn-primary mt-4 flex w-full items-center justify-center gap-2 py-3 text-[15px]"
       >
-        <WhatsAppIcon />
-        הזמינו את מי שבחדר
-      </a>
+        <UserPlus size={18} />
+        הזמן את מי שלידך
+      </button>
     </div>
-  );
-}
-
-function WhatsAppIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm0 18.2c-1.5 0-3-.4-4.3-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.2-.4.7-1.4.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.4.8 3.2.6.5-.1 1.5-.6 1.8-1.2.2-.6.2-1.1.1-1.2l-.5-.3Z" />
-    </svg>
   );
 }
 
