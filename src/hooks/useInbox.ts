@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { alertIncoming } from '../lib/notify';
 import { kindLabel } from '../lib/social';
+import { isLater, loadReads, mergeReads, saveReads, type ReadMap } from '../lib/reads';
 import type { Chat, ConnectionRequest, Message, PublicProfile, RequestKind } from '../lib/types';
 
 export interface ChatThread {
@@ -11,15 +12,8 @@ export interface ChatThread {
   unread: number;
 }
 
+/** Local mirror of chat_reads: fallback while offline / before the read_state migration is applied. */
 const READ_KEY = 'konekt-read';
-
-function loadRead(): Record<string, string> {
-  try {
-    return JSON.parse(localStorage.getItem(READ_KEY) ?? '{}');
-  } catch {
-    return {};
-  }
-}
 
 type Result = { error: string | null };
 
@@ -32,7 +26,14 @@ export function useInbox(userId: string | null) {
   const [chats, setChats] = useState<Chat[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [people, setPeople] = useState<Record<string, PublicProfile>>({});
-  const [readAt, setReadAt] = useState<Record<string, string>>(loadRead);
+  const [readAt, setReadAt] = useState<ReadMap>(() => loadReads(READ_KEY));
+  const readAtRef = useRef(readAt);
+  readAtRef.current = readAt;
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+  useEffect(() => {
+    saveReads(READ_KEY, readAt);
+  }, [readAt]);
   const peopleRef = useRef(people);
   peopleRef.current = people;
 
@@ -54,16 +55,21 @@ export function useInbox(userId: string | null) {
   const load = useCallback(async (): Promise<Chat[]> => {
     if (!userId) return [];
     const since = new Date(Date.now() - 48 * 3600_000).toISOString();
-    const [r, c, m] = await Promise.all([
+    const [r, c, m, cr] = await Promise.all([
       supabase.from('connection_requests').select('*').gte('created_at', since).order('created_at', { ascending: false }),
       supabase.from('chats').select('*'),
       supabase.from('messages').select('*').order('created_at', { ascending: true }).limit(2000),
+      supabase.from('chat_reads').select('chat_id,last_read_at'), // my own rows only (RLS)
     ]);
     const reqs = (r.data ?? []) as ConnectionRequest[];
     const chs = (c.data ?? []) as Chat[];
     setRequests(reqs);
     setChats(chs);
     setMessages((m.data ?? []) as Message[]);
+    if (!cr.error && cr.data) {
+      const entries = (cr.data as { chat_id: string; last_read_at: string }[]).map((x): [string, string] => [x.chat_id, x.last_read_at]);
+      setReadAt((prev) => mergeReads(prev, entries)); // server wins when later; never moves a chat back to unread
+    }
     void loadPeople([
       ...reqs.map((x) => (x.sender_id === userId ? x.receiver_id : x.sender_id)),
       ...chs.map((x) => (x.user_a === userId ? x.user_b : x.user_a)),
@@ -186,17 +192,25 @@ export function useInbox(userId: string | null) {
     return { error: null };
   }, []);
 
-  const markRead = useCallback((chatId: string) => {
-    setReadAt((prev) => {
-      const next = { ...prev, [chatId]: new Date().toISOString() };
-      try {
-        localStorage.setItem(READ_KEY, JSON.stringify(next));
-      } catch {
-        /* private mode */
-      }
-      return next;
-    });
-  }, []);
+  /**
+   * Mark a chat read: now, and in Supabase (chat_reads) so it survives reloads and the installed app.
+   * No-op when there is nothing newer than what was already seen.
+   */
+  const markRead = useCallback(
+    (chatId: string) => {
+      const incoming = messagesRef.current.filter((m) => m.chat_id === chatId && m.sender_id !== userId);
+      const newest = incoming[incoming.length - 1]?.created_at;
+      if (!newest || !isLater(newest, readAtRef.current[chatId])) return;
+      // Optimistic, using the message's own (server) timestamp rather than the phone clock…
+      setReadAt((prev) => mergeReads(prev, [[chatId, newest]]));
+      // …then the server's "now".
+      void supabase.rpc('mark_chat_read', { chat: chatId }).then(({ data, error }) => {
+        if (error) console.warn('mark_chat_read failed', error.message);
+        else if (typeof data === 'string') setReadAt((prev) => mergeReads(prev, [[chatId, data]]));
+      });
+    },
+    [userId],
+  );
 
   const threads = useMemo<ChatThread[]>(() => {
     if (!userId) return [];
@@ -205,7 +219,7 @@ export function useInbox(userId: string | null) {
         const msgs = messages.filter((m) => m.chat_id === chat.id);
         const last = msgs[msgs.length - 1] ?? null;
         const seen = readAt[chat.id];
-        const unread = msgs.filter((m) => m.sender_id !== userId && (!seen || m.created_at > seen)).length;
+        const unread = msgs.filter((m) => m.sender_id !== userId && isLater(m.created_at, seen)).length;
         return { chat, partnerId: partnerOf(chat), last, unread };
       })
       .sort((a, b) => (b.last?.created_at ?? b.chat.created_at).localeCompare(a.last?.created_at ?? a.chat.created_at));

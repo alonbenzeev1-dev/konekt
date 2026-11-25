@@ -150,9 +150,11 @@ function Main({ profile, onProfile, onSignedOut }: { profile: MyProfile; onProfi
     const pending = inbox.requests.filter(
       (r) => r.receiver_id === profile.id && r.status === 'pending' && msLeft(r.expires_at, now) > 0,
     ).length;
-    const unread = inbox.threads.filter((t) => t.unread > 0 && msLeft(t.chat.expires_at, now) > 0).length;
-    return { requests: pending, chats: unread };
-  }, [inbox.requests, inbox.threads, profile.id, now]);
+    // conversations with something unread: 1-on-1 chats + private groups
+    const unreadChats = inbox.threads.filter((t) => t.unread > 0 && msLeft(t.chat.expires_at, now) > 0).length;
+    const unreadGroups = Object.keys(groups.unread).length;
+    return { requests: pending, chats: unreadChats + unreadGroups };
+  }, [inbox.requests, inbox.threads, groups.unread, profile.id, now]);
 
   const titles: Record<Tab, string> = { radar: '', chats: 'צ׳אטים', requests: 'בקשות', profile: 'הפרופיל שלי' };
 

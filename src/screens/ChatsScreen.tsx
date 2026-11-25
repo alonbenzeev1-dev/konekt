@@ -101,6 +101,7 @@ export function ChatsScreen({ myId, inbox, groups, candidates, onOpenChat, onOpe
           }
           const { group, last } = it.summary;
           const count = groups.members[group.id]?.length;
+          const unread = groups.unread[group.id] ?? 0;
           const who = last ? (last.sender_id === myId ? 'את/ה' : groups.members[group.id]?.find((m) => m.member_id === last.sender_id)?.first_name) : null;
           return (
             <li key={it.key}>
@@ -116,8 +117,13 @@ export function ChatsScreen({ myId, inbox, groups, candidates, onOpenChat, onOpe
                     <span className="truncate font-bold text-ink">{group.name}</span>
                     {last && <span className="shrink-0 text-[11px] text-muted">{formatClock(last.created_at)}</span>}
                   </span>
-                  <span className="mt-0.5 block truncate text-sm text-muted">
-                    {last ? `${who ? who + ': ' : ''}${last.content}` : count ? `${count} חברים · עוד אין הודעות` : 'עוד אין הודעות'}
+                  <span className="mt-0.5 flex items-center justify-between gap-2">
+                    <span className={`truncate text-sm ${unread ? 'font-semibold text-ink' : 'text-muted'}`}>
+                      {last ? `${who ? who + ': ' : ''}${last.content}` : count ? `${count} חברים · עוד אין הודעות` : 'עוד אין הודעות'}
+                    </span>
+                    {unread > 0 && (
+                      <span className="shrink-0 rounded-full bg-cta px-1.5 text-[11px] font-bold leading-5 text-white">{unread}</span>
+                    )}
                   </span>
                 </span>
               </button>

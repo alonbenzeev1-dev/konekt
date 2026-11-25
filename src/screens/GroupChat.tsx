@@ -53,9 +53,18 @@ export function GroupChat({ myId, groupId, groups, candidates, onBack }: Props) 
     history.back(); // popstate → back to the Inbox
   };
 
+  const { markRead } = groups;
   useEffect(() => {
+    if (document.visibilityState === 'visible') markRead(groupId); // opening it, or a message arriving while I look
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [msgs.length]);
+  }, [msgs.length, groupId, markRead]);
+
+  // coming back to the app with this group open
+  useEffect(() => {
+    const onVis = () => { if (document.visibilityState === 'visible') markRead(groupId); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [groupId, markRead]);
 
   // Android back button / swipe closes the chat instead of leaving the app.
   const onBackRef = useRef(onBack);

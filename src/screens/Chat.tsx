@@ -30,9 +30,16 @@ export function Chat({ myId, chatId, inbox, onBack }: Props) {
 
   const { markRead } = inbox;
   useEffect(() => {
-    markRead(chatId);
+    if (document.visibilityState === 'visible') markRead(chatId); // a message that arrives while I'm looking at it
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [msgs.length, chatId, markRead]);
+
+  // coming back to the app with this chat open
+  useEffect(() => {
+    const onVis = () => { if (document.visibilityState === 'visible') markRead(chatId); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [chatId, markRead]);
 
   // Android back button / swipe closes the chat instead of leaving the app.
   const onBackRef = useRef(onBack);

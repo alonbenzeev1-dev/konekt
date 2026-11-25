@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { alertIncoming, toast } from '../lib/notify';
+import { isLater, loadReads, mergeReads, saveReads, type ReadMap } from '../lib/reads';
 import type { Group, GroupMember, GroupMessage } from '../lib/types';
+
+/** Local mirror of group_members.last_read_at: fallback while offline / before the read_state migration. */
+const GROUP_READ_KEY = 'konekt-group-read';
 
 type Result = { error: string | null };
 
@@ -20,6 +24,14 @@ export function useGroups(userId: string | null, activeGroupId: string | null) {
   const [groups, setGroups] = useState<Group[]>([]);
   const [members, setMembers] = useState<Record<string, GroupMember[]>>({});
   const [messages, setMessages] = useState<GroupMessage[]>([]);
+  const [reads, setReads] = useState<ReadMap>(() => loadReads(GROUP_READ_KEY));
+  const readsRef = useRef(reads);
+  readsRef.current = reads;
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+  useEffect(() => {
+    saveReads(GROUP_READ_KEY, reads);
+  }, [reads]);
 
   const groupsRef = useRef(groups);
   groupsRef.current = groups;
@@ -37,14 +49,30 @@ export function useGroups(userId: string | null, activeGroupId: string | null) {
 
   const load = useCallback(async () => {
     if (!userId) return;
-    const [g, m] = await Promise.all([
+    const [g, m, mine] = await Promise.all([
       supabase.from('groups').select('*').order('created_at', { ascending: false }),
       supabase.from('group_messages').select('*').order('created_at', { ascending: true }).limit(2000),
+      supabase.from('group_members').select('group_id,last_read_at').eq('user_id', userId),
     ]);
     if (g.error) return; // e.g. migration not applied yet — groups simply stay empty
     const gs = (g.data ?? []) as Group[];
+    const msgs = (m.data ?? []) as GroupMessage[];
     setGroups(gs);
-    setMessages((m.data ?? []) as GroupMessage[]);
+    setMessages(msgs);
+    const fromServer = mine.error
+      ? []
+      : (mine.data as { group_id: string; last_read_at: string | null }[])
+          .filter((x) => x.last_read_at)
+          .map((x): [string, string] => [x.group_id, x.last_read_at as string]);
+    setReads((prev) => {
+      const merged = mergeReads(prev, fromServer);
+      // No read time anywhere for a group (column missing + fresh device): start from "everything so far is read",
+      // instead of flooding the badge with the whole history.
+      const seed: [string, string][] = gs
+        .filter((x) => !merged[x.id])
+        .map((x) => [x.id, [...msgs].reverse().find((y) => y.group_id === x.id)?.created_at ?? x.created_at]);
+      return mergeReads(merged, seed);
+    });
     await Promise.all(gs.map((x) => loadMembers(x.id)));
   }, [userId, loadMembers]);
 
@@ -63,8 +91,13 @@ export function useGroups(userId: string | null, activeGroupId: string | null) {
     if (!userId) return;
 
     const onMemberChange = async (payload: { eventType: string; new: unknown }) => {
-      const row = payload.new as Partial<{ group_id: string; user_id: string }>;
+      const row = payload.new as Partial<{ group_id: string; user_id: string; share_socials: boolean }>;
       if (!row.group_id) return;
+      if (payload.eventType === 'UPDATE') {
+        // members bump last_read_at all the time; only reload when something visible (sharing) changed
+        const known = membersRef.current[row.group_id]?.find((x) => x.member_id === row.user_id);
+        if (known && known.share_socials === row.share_socials) return;
+      }
       if (payload.eventType === 'INSERT' && row.user_id === userId) {
         const known = groupsRef.current.some((g) => g.id === row.group_id);
         await load();
@@ -171,6 +204,33 @@ export function useGroups(userId: string | null, activeGroupId: string | null) {
     [userId, loadMembers],
   );
 
+  /**
+   * Mark a group read: now, and in Supabase (group_members.last_read_at).
+   * No-op when there is nothing newer than what was already seen.
+   */
+  const markRead = useCallback(
+    (groupId: string) => {
+      const incoming = messagesRef.current.filter((m) => m.group_id === groupId && m.sender_id !== userId);
+      const newest = incoming[incoming.length - 1]?.created_at;
+      if (!newest || !isLater(newest, readsRef.current[groupId])) return;
+      setReads((prev) => mergeReads(prev, [[groupId, newest]])); // the message's own (server) timestamp
+      void supabase.rpc('mark_group_read', { grp: groupId }).then(({ data, error }) => {
+        if (error) console.warn('mark_group_read failed', error.message);
+        else if (typeof data === 'string') setReads((prev) => mergeReads(prev, [[groupId, data]]));
+      });
+    },
+    [userId],
+  );
+
+  /** Messages from other people newer than my last_read_at, per group. */
+  const unread = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const m of messages) {
+      if (m.sender_id !== userId && isLater(m.created_at, reads[m.group_id])) out[m.group_id] = (out[m.group_id] ?? 0) + 1;
+    }
+    return out;
+  }, [messages, reads, userId]);
+
   const summaries = useMemo<GroupSummary[]>(
     () =>
       groups
@@ -182,7 +242,7 @@ export function useGroups(userId: string | null, activeGroupId: string | null) {
     [groups, messages],
   );
 
-  return { groups, summaries, members, messages, create, addMembers, leave, sendMessage, setShare, refreshMembers: loadMembers };
+  return { groups, summaries, members, messages, unread, markRead, create, addMembers, leave, sendMessage, setShare, refreshMembers: loadMembers };
 }
 
 export type GroupsData = ReturnType<typeof useGroups>;
