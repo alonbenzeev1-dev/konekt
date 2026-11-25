@@ -120,7 +120,7 @@ function Main({ profile, onProfile, onSignedOut }: { profile: MyProfile; onProfi
   const visible = profile.is_visible;
 
   const { coords, status: geo } = usePresence(profile.id, visible);
-  const { users, campusCount } = useNearby(coords, visible);
+  const { users, campusCount, scanned } = useNearby(coords, visible);
   const inbox = useInbox(profile.id);
   const groups = useGroups(profile.id, groupId);
   const candidates = useGroupCandidates(profile.id, inbox, visible ? users : []);
@@ -161,21 +161,21 @@ function Main({ profile, onProfile, onSignedOut }: { profile: MyProfile; onProfi
   return (
     <>
       <header className="sticky top-0 z-30 border-b border-line bg-card/90 px-4 pb-3 backdrop-blur-xl safe-top">
-        <div className="flex items-center justify-between pt-1">
+        <div className="flex min-h-[44px] items-center justify-between">
           <Wordmark className="text-[15px]" />
           <div className="flex items-center gap-1">
             <NotificationBell userId={profile.id} />
             <button
               onClick={guide.show}
               aria-label="איך זה עובד?"
-              className="flex h-8 w-8 items-center justify-center rounded-full text-muted transition-colors active:bg-bg"
+              className="-mx-1 flex h-11 w-11 items-center justify-center rounded-full text-muted transition-colors active:bg-bg"
             >
               <CircleHelp size={19} />
             </button>
             <VisibilityToggle on={visible} onChange={toggle} />
           </div>
         </div>
-        {titles[tab] && <h1 className="mt-3 text-xl font-extrabold text-ink">{titles[tab]}</h1>}
+        {titles[tab] && <h1 className="mt-1 text-xl leading-tight font-extrabold text-ink">{titles[tab]}</h1>}
       </header>
 
       <InstallPwaBanner />
@@ -188,6 +188,7 @@ function Main({ profile, onProfile, onSignedOut }: { profile: MyProfile; onProfi
             onShow={() => toggle(true)}
             geo={geo}
             users={users}
+            scanned={scanned}
             campusCount={campusCount}
             inbox={inbox}
             onOpenChat={setChatId}

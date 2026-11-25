@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { ArrowUpLeft, Check, Clock, EyeOff, Instagram, Linkedin, Loader2, MapPinOff, MessageCircle, Send, UserPlus, Users, ChevronLeft } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
 import { TagChips } from '../components/TagChips';
+import { NearbySkeleton } from '../components/Skeleton';
 import { BottomSheet } from '../components/BottomSheet';
 import { useConnectionLink } from '../hooks/useConnectionLink';
 import { CAMPUS_RADIUS_M, FEW_PEOPLE, RADIUS_M } from '../hooks/useNearby';
@@ -17,6 +18,8 @@ interface Props {
   onShow: () => void;
   geo: GeoStatus;
   users: NearbyUser[];
+  /** First scan finished (skeleton cards until then). */
+  scanned: boolean;
   campusCount: number | null;
   inbox: Inbox;
   onOpenChat: (chatId: string) => void;
@@ -25,9 +28,10 @@ interface Props {
 /** Friendly proximity instead of a raw distance (indoor GPS is too fuzzy for exact meters). */
 const proximityLabel = (m: number) => (m <= 30 ? 'ממש לידך' : 'באזור שלך');
 
-export function Radar({ myId, visible, onShow, geo, users, campusCount, inbox, onOpenChat }: Props) {
+export function Radar({ myId, visible, onShow, geo, users, scanned, campusCount, inbox, onOpenChat }: Props) {
   const [selected, setSelected] = useState<NearbyUser | null>(null);
   const live = visible && geo === 'ok';
+  const locating = visible && (geo === 'idle' || geo === 'locating');
 
   return (
     <div className="px-4 pb-6">
@@ -40,8 +44,18 @@ export function Radar({ myId, visible, onShow, geo, users, campusCount, inbox, o
           {live && <span className="absolute inset-0 rounded-full bg-live anim-ping" />}
           <span className={`relative h-2.5 w-2.5 rounded-full ${live ? 'bg-live' : 'bg-muted/50'}`} />
         </span>
-        <span className="flex-1 text-sm font-bold text-ink">
-          {live ? `פעיל בסביבה · רדיוס ${RADIUS_M} מ׳` : 'לא פעיל כרגע'}
+        <span className="min-w-0 flex-1 text-sm font-bold text-ink">
+          {live ? (
+            scanned ? (
+              <>פעיל בסביבה · רדיוס <span dir="ltr" className="tabular-nums">{RADIUS_M} מ׳</span></>
+            ) : (
+              'סורקים את הסביבה…'
+            )
+          ) : locating ? (
+            'מאתרים מיקום…'
+          ) : (
+            'לא פעיל כרגע'
+          )}
         </span>
         {live && users.length > 0 && (
           <span className="rounded-full bg-card px-2.5 py-0.5 text-xs font-bold text-live shadow-sm">{users.length} לידך</span>
@@ -64,8 +78,8 @@ export function Radar({ myId, visible, onShow, geo, users, campusCount, inbox, o
         />
       ) : geo === 'unavailable' ? (
         <StateCard icon={<MapPinOff size={24} />} title="לא מצליחים לאתר מיקום" body="בדקו שה-GPS פעיל ושאין מצב חיסכון סוללה קיצוני." />
-      ) : geo !== 'ok' ? (
-        <StateCard icon={<Loader2 size={24} className="animate-spin" />} title="מאתרים מיקום…" body="רגע אחד." />
+      ) : geo !== 'ok' || !scanned ? (
+        <NearbySkeleton />
       ) : (
         <>
           {users.length > 0 && (
@@ -74,19 +88,21 @@ export function Radar({ myId, visible, onShow, geo, users, campusCount, inbox, o
                 <li key={u.id} className="anim-card" style={{ animationDelay: `${Math.min(i, 8) * 35}ms` }}>
                   <button
                     onClick={() => setSelected(u)}
-                    className="card flex w-full items-center gap-3.5 rounded-2xl p-3 text-start transition-transform active:scale-[0.985]"
+                    className="card flex min-h-[92px] w-full items-center gap-3 rounded-2xl p-3.5 text-start transition-transform active:scale-[0.985]"
                   >
                     <Avatar url={u.avatar_url} name={u.first_name} size={56} live />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[17px] font-bold text-ink">{u.first_name}</span>
-                      {u.headline && <span className="block truncate text-sm text-muted">{u.headline}</span>}
-                      <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-bold text-primary">
+                      <span dir="auto" className="block truncate text-[17px] leading-snug font-bold text-ink">{u.first_name}</span>
+                      {u.headline && <span dir="auto" className="block truncate text-sm text-muted">{u.headline}</span>}
+                      <span className="mt-1.5 inline-flex max-w-full items-center gap-1.5 rounded-full bg-primary-soft px-2.5 py-1 text-[11px] leading-none font-bold whitespace-nowrap text-cta-press">
                         <span className="h-1.5 w-1.5 rounded-full bg-primary" />
                         {proximityLabel(u.distance_m)}
+                        <span aria-hidden className="opacity-40">·</span>
+                        <span dir="ltr" className="tabular-nums">~{u.distance_m} מ׳</span>
                       </span>
                       <TagChips tags={u.tags} className="mt-1.5" />
                     </span>
-                    <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-cta px-3 py-1.5 text-sm font-bold text-white">
+                    <span className="flex min-h-[36px] shrink-0 items-center gap-0.5 rounded-full bg-cta ps-3 pe-2 text-[13px] font-bold text-white">
                       התחבר
                       <ChevronLeft size={16} />
                     </span>

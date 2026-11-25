@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Bell, Loader2, LogOut, MapPin } from 'lucide-react';
+import { Bell, Loader2, LogOut, MapPin, Check } from 'lucide-react';
 import { Wordmark } from '../components/Logo';
 import { PhotoPicker } from '../components/PhotoPicker';
 import { LinkFields } from '../components/LinkFields';
@@ -83,48 +83,76 @@ export function CompleteProfile({ uid, initialName, linkedinPicture, onDone }: P
   };
 
   return (
-    <div className="flex min-h-full flex-1 flex-col px-6 safe-top">
-      <header className="flex items-center justify-between pt-3">
+    <div className="flex min-h-full flex-1 flex-col px-5 safe-top">
+      <header className="flex min-h-[44px] items-center justify-between pt-1">
         <Wordmark className="text-[15px]" />
-        <button onClick={() => supabase.auth.signOut().then(() => location.reload())} className="flex items-center gap-1 text-xs text-muted">
-          <LogOut size={13} /> התנתקות
+        <button
+          onClick={() => supabase.auth.signOut().then(() => location.reload())}
+          className="-me-2 flex min-h-[44px] items-center gap-1 px-2 text-xs font-medium text-muted"
+        >
+          <LogOut size={14} /> התנתקות
         </button>
       </header>
 
+      {/* where the student is in the sign-up: signed in -> profile (here) -> in the app */}
+      <ol aria-label="התקדמות" className="mt-3 flex items-center gap-2">
+        <li className="flex items-center gap-1.5 text-xs font-bold text-live">
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-live text-white"><Check size={12} strokeWidth={3} /></span>
+          התחברות
+        </li>
+        <span aria-hidden className="h-px flex-1 bg-live/40" />
+        <li aria-current="step" className="flex items-center gap-1.5 text-xs font-bold text-ink">
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-cta text-[11px] font-extrabold text-white">2</span>
+          הפרופיל שלך
+        </li>
+        <span aria-hidden className="h-px flex-1 bg-line" />
+        <li className="flex items-center gap-1.5 text-xs font-medium text-muted">
+          <span className="flex h-5 w-5 items-center justify-center rounded-full border border-line bg-card text-[11px] font-bold">3</span>
+          מתחילים
+        </li>
+      </ol>
+
       <div className="mt-6 text-center">
-        <h1 className="text-2xl font-extrabold text-ink">כמעט שם{initialName ? `, ${initialName}` : ''}!</h1>
+        <h1 className="text-2xl leading-tight font-extrabold text-ink">כמעט שם{initialName ? `, ${initialName}` : ''}</h1>
         <p className="mt-1 text-sm text-muted">עוד כמה פרטים וזהו. 15 שניות.</p>
       </div>
 
-      <main className="mt-6 flex-1 space-y-5">
-        <PhotoPicker
-          preview={preview}
-          size={108}
-          label="החלפת התמונה מ-LinkedIn"
-          onPick={(f) => {
-            setFile(f);
-            setPreview(URL.createObjectURL(f));
-          }}
-        />
-        <p className="-mt-2 text-center text-[11px] text-muted">{file ? 'תמונה חדשה' : 'התמונה מ-LinkedIn'} · אפשר להחליף</p>
+      <main className="mt-6 flex-1 space-y-4">
+        <section className="card rounded-2xl p-4">
+          <div className="flex flex-col items-center">
+            <PhotoPicker
+              preview={preview}
+              size={96}
+              label="החלפת התמונה מ-LinkedIn"
+              onPick={(f) => {
+                setFile(f);
+                setPreview(URL.createObjectURL(f));
+              }}
+            />
+            <p className="mt-2 text-center text-xs text-muted">{file ? 'תמונה חדשה' : 'התמונה מ-LinkedIn'} · אפשר להחליף</p>
+          </div>
+          <div className="mt-4 space-y-4">
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-bold text-ink">שם פרטי</span>
+              <input className={`field font-bold ${tried && !name.trim() ? '!border-danger' : ''}`} maxLength={30} value={name} onChange={(e) => setName(e.target.value)} autoComplete="given-name" />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 flex items-center justify-between text-xs font-bold text-ink">
+                <span>שורת תיאור קצרה <span className="font-normal text-muted">(מופיעה בסביבה)</span></span>
+                <span className="font-normal text-muted tabular-nums">{headline.length}/60</span>
+              </span>
+              <input className="field" maxLength={60} value={headline} onChange={(e) => setHeadline(e.target.value)} placeholder="למשל: מדעי המחשב, שנה ב׳" />
+            </label>
+          </div>
+        </section>
 
-        <div className="card space-y-4 rounded-3xl p-4">
-          <label className="block">
-            <span className="mb-1.5 block text-xs font-bold text-ink">שם פרטי</span>
-            <input className={`field font-bold ${tried && !name.trim() ? '!border-danger' : ''}`} maxLength={30} value={name} onChange={(e) => setName(e.target.value)} autoComplete="given-name" />
-          </label>
-          <label className="block">
-            <span className="mb-1.5 flex items-center justify-between text-xs font-bold text-ink">
-              <span>שורת תיאור קצרה <span className="font-normal text-muted">(מופיעה בסביבה)</span></span>
-              <span className="font-normal text-muted tabular-nums">{headline.length}/60</span>
-            </span>
-            <input className="field" maxLength={60} value={headline} onChange={(e) => setHeadline(e.target.value)} placeholder="למשל: מדעי המחשב, שנה ב׳" />
-          </label>
+        <section className="card rounded-2xl p-4">
+          <h2 className="mb-3 text-sm font-bold text-ink">הקישורים שלך</h2>
           <LinkFields linkedin={linkedin} onLinkedin={setLinkedin} instagram={instagram} onInstagram={setInstagram} linkedinError={liBad} instagramError={igBad} autoCapture />
-        </div>
+        </section>
       </main>
 
-      <footer className="py-6 safe-bottom">
+      <footer className="py-5 safe-bottom">
         <button onClick={submit} disabled={!!busy} className="btn-primary flex w-full items-center justify-center gap-2 py-4 text-lg">
           {busy ? (<><Loader2 size={20} className="animate-spin" />{busy}</>) : 'הפעל את KONEKT'}
         </button>

@@ -105,7 +105,7 @@ export function Chat({ myId, chatId, inbox, onBack }: Props) {
                 }`}
               >
                 <p className="whitespace-pre-wrap break-words">{m.content}</p>
-                <p className={`mt-0.5 text-[10px] ${mine ? 'text-white/80' : 'text-muted'}`}>{formatClock(m.created_at)}</p>
+                <p className={`mt-0.5 text-[10px] tabular-nums ${mine ? 'text-white/80' : 'text-muted'}`}>{formatClock(m.created_at)}</p>
               </div>
             </div>
           );

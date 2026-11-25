@@ -12,6 +12,7 @@ export const FEW_PEOPLE = 3;
 export function useNearby(coords: Coords | null, visible: boolean) {
   const [users, setUsers] = useState<NearbyUser[]>([]);
   const [campusCount, setCampusCount] = useState<number | null>(null);
+  const [scanned, setScanned] = useState(false); // first result (or failure) is in: lets the UI show skeletons until then
   const coordsRef = useRef(coords);
   coordsRef.current = coords;
 
@@ -25,6 +26,7 @@ export function useNearby(coords: Coords | null, visible: boolean) {
     if (nearby.error) console.warn('nearby failed', nearby.error.message);
     else setUsers((nearby.data ?? []) as NearbyUser[]);
     if (!campus.error && typeof campus.data === 'number') setCampusCount(campus.data);
+    setScanned(true);
   }, []);
 
   const hasCoords = coords !== null;
@@ -40,6 +42,7 @@ export function useNearby(coords: Coords | null, visible: boolean) {
     if (!visible) {
       setUsers([]);
       setCampusCount(null);
+      setScanned(false);
       return;
     }
     const t = setInterval(() => {
@@ -48,5 +51,5 @@ export function useNearby(coords: Coords | null, visible: boolean) {
     return () => clearInterval(t);
   }, [visible, refresh]);
 
-  return { users, campusCount, refresh };
+  return { users, campusCount, scanned, refresh };
 }

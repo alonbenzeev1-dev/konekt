@@ -24,10 +24,10 @@ export function NotificationBell({ userId }: { userId: string }) {
     <button
       onClick={ask}
       aria-label="הפעלת התראות"
-      className="relative flex h-8 w-8 items-center justify-center rounded-full text-primary transition-colors active:bg-bg"
+      className="relative -mx-1 flex h-11 w-11 items-center justify-center rounded-full text-cta transition-colors active:bg-bg"
     >
       <Bell size={19} />
-      <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-cta ring-2 ring-card" />
+      <span className="absolute top-2.5 end-2.5 h-2 w-2 rounded-full bg-danger ring-2 ring-card" />
     </button>
   );
 }

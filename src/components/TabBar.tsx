@@ -12,7 +12,7 @@ const ITEMS: { id: Tab; label: string; Icon: LucideIcon }[] = [
 
 export function TabBar({ tab, onTab, badges }: { tab: Tab; onTab: (t: Tab) => void; badges: Partial<Record<Tab, number>> }) {
   return (
-    <nav className="sticky bottom-0 z-30 border-t border-line bg-card/95 backdrop-blur-xl safe-bottom">
+    <nav aria-label="ניווט ראשי" className="sticky bottom-0 z-30 border-t border-line bg-card/95 backdrop-blur-xl safe-bottom">
       <ul className="grid grid-cols-4">
         {ITEMS.map(({ id, label, Icon }) => {
           const active = tab === id;
@@ -21,21 +21,24 @@ export function TabBar({ tab, onTab, badges }: { tab: Tab; onTab: (t: Tab) => vo
             <li key={id}>
               <button
                 onClick={() => onTab(id)}
-                className={`relative flex w-full flex-col items-center gap-1 px-1 pt-2.5 pb-1.5 text-[11px] font-medium transition-colors ${
-                  active ? 'text-primary' : 'text-muted'
-                }`}
                 aria-current={active ? 'page' : undefined}
+                aria-label={badge > 0 ? `${label}, ${badge} חדשים` : label}
+                className="flex min-h-[56px] w-full flex-col items-center justify-center gap-0.5 px-1 pt-1.5 pb-1 active:opacity-70"
               >
-                {active && <span className="absolute top-0 h-0.5 w-8 rounded-full bg-primary" />}
-                <span className="relative">
+                {/* the pill is the active indicator; the badge hangs off its top corner, same spot on every tab */}
+                <span
+                  className={`relative flex h-7 w-14 items-center justify-center rounded-full transition-colors duration-200 ${
+                    active ? 'bg-primary-soft text-cta' : 'text-muted'
+                  }`}
+                >
                   <Icon size={22} strokeWidth={active ? 2.3 : 1.8} />
                   {badge > 0 && (
-                    <span className="absolute -top-1.5 -right-2.5 min-w-[18px] rounded-full bg-cta px-1 text-center text-[10px] font-bold leading-[18px] text-white ring-2 ring-card">
+                    <span dir="ltr" className="absolute -top-1.5 end-1 min-w-[18px] rounded-full bg-cta px-1 text-center text-[10px] leading-[18px] font-bold text-white tabular-nums ring-2 ring-card">
                       {badge > 9 ? '9+' : badge}
                     </span>
                   )}
                 </span>
-                <span className="max-w-full truncate">{label}</span>
+                <span className={`max-w-full truncate text-[11px] leading-4 ${active ? 'font-bold text-cta' : 'font-medium text-muted'}`}>{label}</span>
               </button>
             </li>
           );

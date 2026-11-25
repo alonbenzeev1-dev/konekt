@@ -1,11 +1,11 @@
 @import "tailwindcss";
 
 @theme {
-  --color-bg: #F0F9FF;          /* ice-blue background */
+  --color-bg: #F8FAFC;          /* cool off-white canvas */
   --color-card: #FFFFFF;        /* clean white cards */
-  --color-primary: #00AEEF;     /* bright cyan */
+  --color-primary: #00AEEF;     /* bright cyan: accents, icons, rings, dots (never small text on white) */
   --color-primary-soft: #E0F6FE;
-  --color-cta: #0284C7;         /* buttons & white-on-blue elements (4.1:1 with white) */
+  --color-cta: #0284C7;         /* filled buttons & anything with white text (4.1:1) — readable outdoors */
   --color-cta-press: #0369A1;
   --color-ink: #0F172A;         /* deep navy text */
   --color-muted: #64748B;
@@ -46,11 +46,13 @@
     font-weight: 700;
     border-radius: 1rem;
     box-shadow: var(--shadow-cta);
+    min-height: 44px;
     transition: transform .12s ease, background .12s ease, opacity .12s ease;
   }
   .btn-primary:active { transform: scale(.98); background: var(--color-cta-press); }
   .btn-primary:disabled { opacity: .45; box-shadow: none; }
   .btn-ghost {
+    min-height: 44px;
     border-radius: 1rem;
     border: 1px solid var(--color-line);
     color: var(--color-ink);
@@ -80,6 +82,7 @@
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes toast-in { from { transform: translateY(-12px); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes card-in { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes skeleton-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
 @keyframes live-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgb(16 185 129 / .45); } 50% { box-shadow: 0 0 0 5px rgb(16 185 129 / 0); } }
 
 .anim-ping { animation: ping-ring 2.4s cubic-bezier(.2,.6,.3,1) infinite; }
@@ -89,7 +92,8 @@
 .anim-toast { animation: toast-in .25s ease; }
 .anim-card { animation: card-in .3s ease both; }
 .anim-live { animation: live-pulse 2s ease-in-out infinite; }
+.skeleton { background: rgb(226 232 240 / .75); border-radius: .75rem; animation: skeleton-pulse 1.4s ease-in-out infinite; }
 
 @media (prefers-reduced-motion: reduce) {
-  .anim-ping, .anim-sweep, .anim-live { animation: none; }
+  .anim-ping, .anim-sweep, .anim-live, .skeleton { animation: none; }
 }

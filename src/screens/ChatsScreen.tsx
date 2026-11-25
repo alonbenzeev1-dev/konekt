@@ -79,7 +79,7 @@ export function ChatsScreen({ myId, inbox, groups, candidates, onOpenChat, onOpe
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center justify-between gap-2">
                       <span className="truncate font-bold text-ink">{p?.first_name ?? '…'}</span>
-                      {t.last && <span className="shrink-0 text-[11px] text-muted">{formatClock(t.last.created_at)}</span>}
+                      {t.last && <span className="shrink-0 text-[11px] text-muted tabular-nums">{formatClock(t.last.created_at)}</span>}
                     </span>
                     <span className="mt-0.5 flex items-center justify-between gap-2">
                       <span className={`truncate text-sm ${t.unread ? 'font-semibold text-ink' : 'text-muted'}`}>
@@ -115,7 +115,7 @@ export function ChatsScreen({ myId, inbox, groups, candidates, onOpenChat, onOpe
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center justify-between gap-2">
                     <span className="truncate font-bold text-ink">{group.name}</span>
-                    {last && <span className="shrink-0 text-[11px] text-muted">{formatClock(last.created_at)}</span>}
+                    {last && <span className="shrink-0 text-[11px] text-muted tabular-nums">{formatClock(last.created_at)}</span>}
                   </span>
                   <span className="mt-0.5 flex items-center justify-between gap-2">
                     <span className={`truncate text-sm ${unread ? 'font-semibold text-ink' : 'text-muted'}`}>

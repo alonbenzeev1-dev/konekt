@@ -11,14 +11,14 @@ export function Avatar({ url, name, size = 56, ring = false, live = false }: Pro
   return (
     <span className="relative inline-block shrink-0" style={{ width: size, height: size }}>
       <span
-        className={`block h-full w-full overflow-hidden rounded-full bg-primary-soft ${
+        className={`block h-full w-full overflow-hidden rounded-full bg-primary-soft shadow-sm ${
           ring ? 'ring-2 ring-primary ring-offset-2 ring-offset-card' : 'ring-1 ring-line'
         }`}
       >
         {url ? (
           <img src={url} alt={name} className="h-full w-full object-cover" loading="lazy" draggable={false} referrerPolicy="no-referrer" />
         ) : (
-          <span className="flex h-full w-full items-center justify-center font-bold text-primary" style={{ fontSize: size * 0.38 }}>
+          <span className="flex h-full w-full items-center justify-center font-extrabold text-cta-press" style={{ fontSize: size * 0.38 }}>
             {name.slice(0, 1)}
           </span>
         )}
