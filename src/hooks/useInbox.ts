@@ -113,6 +113,10 @@ export function useInbox(userId: string | null) {
         async (payload) => {
           const req = payload.new as ConnectionRequest;
           setRequests((prev) => [req, ...prev.filter((x) => x.id !== req.id)]);
+          if (req.status !== 'pending') {
+            void loadPeople([req.sender_id]); // already approved on arrival (mutual approval): no "new request" alert
+            return;
+          }
           const name = await nameOf(req.sender_id);
           const body = req.kind === 'chat' ? `${name} רוצה להתחיל צ׳אט` : `${name} מבקש/ת את ה-${kindLabel[req.kind]} שלך`;
           void alertIncoming('בקשה חדשה', body, `req-${req.id}`);
@@ -155,17 +159,33 @@ export function useInbox(userId: string | null) {
     [loadPeople],
   );
 
-  /** Approve ("אשר"). For a chat request, returns the id of the chat it opened. */
+  /**
+   * Approve ("אשר"). With `shareBack` (links only) the requester's link is handed back too, so both can open each
+   * other's profile; `mutual` tells whether that actually happened. For a chat request, returns the chat id.
+   */
   const respond = useCallback(
-    async (requestId: string): Promise<Result & { chatId?: string }> => {
-      const { data, error } = await supabase.rpc('respond_request', { request_id: requestId, accept: true });
+    async (requestId: string, shareBack = false): Promise<Result & { chatId?: string; mutual?: boolean }> => {
+      const { data, error } = await supabase.rpc('respond_request', { request_id: requestId, accept: true, share_back: shareBack });
       if (error) return { error: error.message };
       const req = data as ConnectionRequest;
       setRequests((prev) => prev.map((x) => (x.id === req.id ? req : x)));
-      if (req.kind !== 'chat') return { error: null };
-      const chs = await load();
-      const chat = chs.find((c) => c.user_a === req.sender_id || c.user_b === req.sender_id);
-      return { error: null, chatId: chat?.id };
+      if (req.kind === 'chat') {
+        const chs = await load();
+        const chat = chs.find((c) => c.user_a === req.sender_id || c.user_b === req.sender_id);
+        return { error: null, chatId: chat?.id };
+      }
+      if (!shareBack) return { error: null };
+      // the reciprocal approved request is created server-side (only if they have that link): pull it in
+      await load();
+      const { data: back } = await supabase
+        .from('connection_requests')
+        .select('id')
+        .eq('sender_id', req.receiver_id)
+        .eq('receiver_id', req.sender_id)
+        .eq('kind', req.kind)
+        .eq('status', 'accepted')
+        .limit(1);
+      return { error: null, mutual: !!back?.length };
     },
     [load],
   );

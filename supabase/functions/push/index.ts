@@ -41,7 +41,7 @@ Deno.serve(async (req) => {
     to = r.receiver_id;
     fromId = r.sender_id;
     payload = { title: 'הודעה חדשה', body: r.content.slice(0, 80), tag: `msg-${r.chat_id}`, url: '/?tab=chats' };
-  } else if (body.table === 'connection_requests' && body.type === 'INSERT') {
+  } else if (body.table === 'connection_requests' && body.type === 'INSERT' && r.status === 'pending') {
     to = r.receiver_id;
     fromId = r.sender_id;
     // Chat requests: don't put the (not yet approved) first message on the lock screen.

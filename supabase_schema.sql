@@ -19,6 +19,7 @@ drop function if exists public.send_connection_request(uuid, text);
 drop function if exists public.respond_connection_request(uuid, boolean);
 drop function if exists public.send_request(uuid, text, text);
 drop function if exists public.respond_request(uuid, boolean);
+drop function if exists public.respond_request(uuid, boolean, boolean);
 drop function if exists public.block_user(uuid);
 drop function if exists public.send_message(uuid, text);
 drop function if exists public.get_connection_link(uuid);
@@ -445,7 +446,7 @@ $$;
 -- respond_request — receiver approves. Approving a chat request opens a
 -- 24h chat and posts the first message into it.
 -- ---------------------------------------------------------------------
-create function public.respond_request(request_id uuid, accept boolean)
+create function public.respond_request(request_id uuid, accept boolean, share_back boolean default false)
 returns public.connection_requests
 language plpgsql volatile security definer set search_path = public
 as $$
@@ -454,6 +455,8 @@ declare
   c   public.chats;
   a   uuid;
   b   uuid;
+  mine_has   boolean;
+  theirs_has boolean;
 begin
   update public.connection_requests
      set status = case when accept and expires_at > now() then 'accepted' else 'expired' end
@@ -474,6 +477,31 @@ begin
     returning * into c;
     insert into public.messages (chat_id, sender_id, receiver_id, content)
     values (c.id, req.sender_id, req.receiver_id, req.message);
+  end if;
+
+  -- "Approve and share mine too": the person who asked for my link also hands me theirs.
+  -- The requester only exposed their own link by asking (the send sheet says so), and only
+  -- if they have one. It is recorded as an already-approved request from me to them, so
+  -- get_connection_link works for me exactly as it does for any approved request.
+  if req.status = 'accepted' and share_back and req.kind in ('linkedin', 'instagram') then
+    select case req.kind when 'linkedin' then p.linkedin_url is not null else p.instagram_handle is not null end
+      into mine_has   from public.profiles p where p.id = req.receiver_id;
+    select case req.kind when 'linkedin' then p.linkedin_url is not null else p.instagram_handle is not null end
+      into theirs_has from public.profiles p where p.id = req.sender_id;
+
+    if coalesce(mine_has, false) and coalesce(theirs_has, false) then
+      -- my own still-pending request for the same thing is replaced by the approved one
+      update public.connection_requests set status = 'expired'
+       where sender_id = req.receiver_id and receiver_id = req.sender_id
+         and kind = req.kind and status = 'pending';
+      if not exists (select 1 from public.connection_requests
+                      where sender_id = req.receiver_id and receiver_id = req.sender_id
+                        and kind = req.kind and status = 'accepted'
+                        and created_at > now() - interval '48 hours') then
+        insert into public.connection_requests (sender_id, receiver_id, kind, status)
+        values (req.receiver_id, req.sender_id, req.kind, 'accepted');
+      end if;
+    end if;
   end if;
   return req;
 end;
@@ -576,7 +604,7 @@ revoke all on function public.get_nearby_users(double precision, double precisio
 revoke all on function public.get_campus_count(double precision, double precision)              from public, anon;
 revoke all on function public.get_public_profiles(uuid[])                                       from public, anon;
 revoke all on function public.send_request(uuid, text, text)                                    from public, anon;
-revoke all on function public.respond_request(uuid, boolean)                                    from public, anon;
+revoke all on function public.respond_request(uuid, boolean, boolean)                              from public, anon;
 revoke all on function public.block_user(uuid)                                                  from public, anon;
 revoke all on function public.send_message(uuid, text)                                          from public, anon;
 revoke all on function public.get_connection_link(uuid)                                         from public, anon;
@@ -587,7 +615,7 @@ grant execute on function public.get_nearby_users(double precision, double preci
 grant execute on function public.get_campus_count(double precision, double precision)              to authenticated;
 grant execute on function public.get_public_profiles(uuid[])                                       to authenticated;
 grant execute on function public.send_request(uuid, text, text)                                    to authenticated;
-grant execute on function public.respond_request(uuid, boolean)                                    to authenticated;
+grant execute on function public.respond_request(uuid, boolean, boolean)                              to authenticated;
 grant execute on function public.block_user(uuid)                                                  to authenticated;
 grant execute on function public.send_message(uuid, text)                                          to authenticated;
 grant execute on function public.get_connection_link(uuid)                                         to authenticated;

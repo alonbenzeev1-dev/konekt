@@ -178,7 +178,7 @@ export function LinkFields(p: Props) {
 
       <p className="flex items-start gap-1.5 rounded-xl bg-primary-soft px-3 py-2 text-xs leading-relaxed text-ink/80">
         <Lock size={13} className="mt-0.5 shrink-0 text-primary" />
-        הקישורים נעולים ומוסתרים. הם נחשפים רק למי שאישרתם לו בקשה.
+        הקישורים נעולים ומוסתרים. הם נחשפים רק כשמאשרים בקשה, או כשמי שביקשתם ממנו קישור בוחר לשתף גם את שלו.
       </p>
     </div>
   );

@@ -196,7 +196,12 @@ function Main({ profile, onProfile, onSignedOut }: { profile: MyProfile; onProfi
         {tab === 'chats' && (
           <ChatsScreen myId={profile.id} inbox={inbox} groups={groups} candidates={candidates} onOpenChat={setChatId} onOpenGroup={setGroupId} />
         )}
-        {tab === 'requests' && <RequestsScreen myId={profile.id} inbox={inbox} onOpenChat={setChatId} />}
+        {tab === 'requests' && <RequestsScreen
+            myId={profile.id}
+            inbox={inbox}
+            myLinks={{ linkedin: !!profile.linkedin_url, instagram: !!profile.instagram_handle }}
+            onOpenChat={setChatId}
+          />}
         {tab === 'profile' && (
           <Profile profile={profile} onProfile={onProfile} visible={visible} onToggle={toggle} onSignedOut={onSignedOut} />
         )}

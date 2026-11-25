@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowUpLeft, Check, Clock, EyeOff, Instagram, Linkedin, Loader2, MessageCircle, UserCheck } from 'lucide-react';
+import { Check, Clock, EyeOff, Instagram, Linkedin, Loader2, MessageCircle, UserCheck } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
 import { Section } from '../components/Section';
 import { useConnectionLink } from '../hooks/useConnectionLink';
@@ -8,16 +8,18 @@ import { toast } from '../lib/notify';
 import { kindLabel } from '../lib/social';
 import { formatCountdown, msLeft } from '../lib/time';
 import type { Inbox as InboxData } from '../hooks/useInbox';
-import type { ConnectionRequest, PublicProfile, RequestKind } from '../lib/types';
+import type { ConnectionRequest, Platform, PublicProfile, RequestKind } from '../lib/types';
 
 interface Props {
   myId: string;
   inbox: InboxData;
+  /** Which of MY profile links are filled in — decides whether "approve and share mine too" is offered. */
+  myLinks: Record<Platform, boolean>;
   onOpenChat: (chatId: string) => void;
 }
 
 /** "בקשות": who asked me for something, what I was given, and what I asked for. */
-export function RequestsScreen({ myId, inbox, onOpenChat }: Props) {
+export function RequestsScreen({ myId, inbox, myLinks, onOpenChat }: Props) {
   const now = useNow(1000);
   const { requests, people } = inbox;
 
@@ -41,13 +43,13 @@ export function RequestsScreen({ myId, inbox, onOpenChat }: Props) {
       {incoming.length > 0 && (
         <Section title="ממתינות לאישור שלך" count={incoming.length}>
           {incoming.map((r) => (
-            <IncomingCard key={r.id} req={r} person={people[r.sender_id]} now={now} inbox={inbox} onOpenChat={onOpenChat} />
+            <IncomingCard key={r.id} req={r} person={people[r.sender_id]} now={now} inbox={inbox} myLinks={myLinks} onOpenChat={onOpenChat} />
           ))}
         </Section>
       )}
 
       {links.length > 0 && (
-        <Section title="חיבורים שאושרו">
+        <Section title="חיבורים שאושרו" hint="לחצו לפתיחת הפרופיל והוספה ישירה ב-LinkedIn או ב-Instagram">
           {links.map((r) => (
             <LinkCard
               key={r.id}
@@ -96,27 +98,34 @@ function IncomingCard({
   person,
   now,
   inbox,
+  myLinks,
   onOpenChat,
 }: {
   req: ConnectionRequest;
   person?: PublicProfile;
   now: number;
   inbox: InboxData;
+  myLinks: Record<Platform, boolean>;
   onOpenChat: (chatId: string) => void;
 }) {
-  const [busy, setBusy] = useState<'yes' | 'no' | null>(null);
+  const [busy, setBusy] = useState<'both' | 'yes' | 'no' | null>(null);
   const left = msLeft(req.expires_at, now);
   const pct = Math.max(0, Math.min(100, (left / (2 * 3600_000)) * 100));
   const name = person?.first_name ?? '…';
 
-  const approve = async () => {
-    setBusy('yes');
-    const { error, chatId } = await inbox.respond(req.id);
+  // links can be approved one-way, or as an exchange (needs a link of mine for the same platform)
+  const canExchange = req.kind !== 'chat' && myLinks[req.kind];
+
+  const approve = async (shareBack: boolean) => {
+    setBusy(shareBack ? 'both' : 'yes');
+    const { error, chatId, mutual } = await inbox.respond(req.id, shareBack);
     setBusy(null);
     if (error) return toast('הבקשה כבר לא בתוקף', 'error');
     if (req.kind === 'chat') {
       toast(`הצ׳אט עם ${name} פתוח ל-24 שעות`, 'success');
       if (chatId) onOpenChat(chatId);
+    } else if (mutual) {
+      toast(`שיתפתם זה עם זה. אפשר לפתוח את ה-${kindLabel[req.kind]} של ${name} ב״חיבורים שאושרו״`, 'success');
     } else {
       toast(`${name} יכול/ה עכשיו לראות את ה-${kindLabel[req.kind]} שלך`, 'success');
     }
@@ -153,16 +162,36 @@ function IncomingCard({
       {req.kind === 'chat' && req.message && (
         <div className="mx-3 mb-3 rounded-2xl rounded-ss-md bg-bg px-3.5 py-2.5 text-[15px] leading-snug text-ink">{req.message}</div>
       )}
-      <div className="grid grid-cols-2 gap-2 px-3 pb-3">
-        <button onClick={approve} disabled={!!busy} className="btn-primary flex items-center justify-center gap-1.5 py-2.5 text-sm">
-          {busy === 'yes' ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-          אשר
-        </button>
-        <button onClick={ignoreBlock} disabled={!!busy} className="btn-ghost flex items-center justify-center gap-1.5 py-2.5 text-sm text-muted">
-          {busy === 'no' ? <Loader2 size={16} className="animate-spin" /> : <EyeOff size={16} />}
-          התעלם / חסום
-        </button>
-      </div>
+      {canExchange ? (
+        <div className="space-y-2 px-3 pb-3">
+          <button onClick={() => approve(true)} disabled={!!busy} className="btn-primary flex w-full items-center justify-center gap-1.5 py-2.5 text-sm">
+            {busy === 'both' ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+            אשר ושתף גם את שלי
+          </button>
+          <p className="px-1 text-center text-[11px] leading-snug text-muted">גם {name} ישתף את הקישור, ושניכם תוכלו לפתוח אחד לשני את הפרופיל</p>
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={() => approve(false)} disabled={!!busy} className="btn-ghost flex items-center justify-center gap-1.5 py-2 text-sm text-ink">
+              {busy === 'yes' && <Loader2 size={15} className="animate-spin" />}
+              אשר בלבד
+            </button>
+            <button onClick={ignoreBlock} disabled={!!busy} className="btn-ghost flex items-center justify-center gap-1.5 py-2 text-sm text-muted">
+              {busy === 'no' ? <Loader2 size={15} className="animate-spin" /> : <EyeOff size={15} />}
+              התעלם / חסום
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-2 px-3 pb-3">
+          <button onClick={() => approve(false)} disabled={!!busy} className="btn-primary flex items-center justify-center gap-1.5 py-2.5 text-sm">
+            {busy === 'yes' ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+            אשר
+          </button>
+          <button onClick={ignoreBlock} disabled={!!busy} className="btn-ghost flex items-center justify-center gap-1.5 py-2.5 text-sm text-muted">
+            {busy === 'no' ? <Loader2 size={16} className="animate-spin" /> : <EyeOff size={16} />}
+            התעלם / חסום
+          </button>
+        </div>
+      )}
       <div className="h-1 bg-bg">
         <div className="h-full bg-primary transition-[width] duration-1000" style={{ width: `${pct}%` }} />
       </div>
@@ -219,14 +248,12 @@ function LinkCard({
             href={link}
             target="_blank"
             rel="noopener noreferrer"
-            className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-bold text-white ${
+            className={`flex w-full items-center justify-center gap-1.5 rounded-xl px-3.5 py-2.5 text-sm font-bold text-white ${
               req.kind === 'linkedin' ? 'bg-[#0A66C2]' : 'bg-gradient-to-tr from-[#F58529] via-[#DD2A7B] to-[#8134AF]'
             }`}
           >
-            {req.kind === 'linkedin' ? <Linkedin size={15} /> : <Instagram size={15} />}
-            <span className="sr-only">{label}</span>
-            פתח
-            <ArrowUpLeft size={14} />
+            {req.kind === 'linkedin' ? <Linkedin size={16} /> : <Instagram size={16} />}
+            {req.kind === 'linkedin' ? 'פתח פרופיל ב-LinkedIn להוספה ↗' : 'פתח פרופיל ב-Instagram ↗'}
           </a>
         ) : (
           <Loader2 size={18} className="animate-spin text-muted" />

@@ -30,7 +30,7 @@ const SLIDES: { Icon: LucideIcon; tab: string; title: string; body: string }[] =
     Icon: UserCheck,
     tab: 'בקשות',
     title: 'חיבורים בשליטה מלאה',
-    body: 'שלחו בקשת LinkedIn או Instagram בלחיצה. הפרופיל שלכם נחשף רק למי שאישרתם, ובקשה שלא נענתה פגה אוטומטית אחרי שעתיים.',
+    body: 'שלח בקשת LinkedIn או Instagram בלחיצה. לאחר האישור נפתח לך קישור ישיר לפרופיל כדי להתחבר — וכל בקשה פגה אוטומטית אחרי 48 שעות.',
   },
   {
     Icon: MessageCircle,

@@ -14,13 +14,15 @@ Commands: `npm run dev`, `npm run build` (`tsc -b && vite build`; must be clean 
 - `supabase_schema.sql` full schema, RLS and RPCs (paste into SQL Editor; safe to re-run)
 - `supabase/migrations/private_groups.sql` private groups (groups, group_members, group_messages + RPCs); apply after the main schema
 - `supabase/migrations/read_state.sql` server-side read state: group_members.last_read_at, chat_reads, mark_chat_read / mark_group_read
+- `supabase/migrations/mutual_approval.sql` respond_request(request_id, accept, share_back)
 - `supabase/migrations/campus_tags.sql` profiles.tags (max 3) + get_nearby_users returning tags
 - `supabase/functions/` import-avatar, push
 
 ## Request logic (one-way, 48h)
 - Other users' profile rows are never readable (RLS: own row only). Everything goes through SECURITY DEFINER RPCs.
 - `send_request(target, kind)` creates a request (pending for 2 h). The receiver approves with `respond_request`.
-- Approval is ONE-WAY: only the sender can fetch the receiver's link, via `get_connection_link(request_id)`.
+- Approval is ONE-WAY by default: only the sender can fetch the receiver's link, via `get_connection_link(request_id)`.
+- "אשר ושתף גם את שלי" = `respond_request(..., share_back := true)`: also records an already-approved request from the approver to the requester (if they have that link), so both can open each other's link. Requesters are told this on the send sheet.
 - To get the other person's link back, the receiver must send their own request ("בקש גם ... חזרה" on the Inbox link card).
 - The client loads only the last 48 h of requests, so approved links older than that disappear from the UI.
 - Blocks are mutual, permanent and silent.

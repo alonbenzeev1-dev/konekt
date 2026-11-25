@@ -266,7 +266,7 @@ function PersonSheet({
           />
         ))}
       </div>
-      <p className="mt-3 text-center text-[11px] text-muted">הקישור נחשף רק אם {user.first_name} מאשר/ת, תוך שעתיים.</p>
+      <p className="mt-3 text-center text-[11px] text-muted">הקישור נחשף רק אם {user.first_name} מאשר/ת, תוך שעתיים. אם {user.first_name} יבחר/תבחר לשתף גם את שלו/ה, גם הקישור שלך ייחשף אליו/ה.</p>
 
       <button onClick={block} className="mx-auto mt-4 block text-xs text-muted underline-offset-2 hover:text-danger hover:underline">
         חסימה (הדדית וקבועה)
