@@ -76,6 +76,8 @@ export interface Group {
   location_tag?: string | null;
   /** The secret in ?join=<code>. */
   invite_code?: string;
+  /** One message pinned at the top of the room (only the creator sets it). */
+  pinned_message_id?: string | null;
 }
 
 /** A group member as returned by get_group_members: links only when they chose to share. */
@@ -99,6 +101,32 @@ export interface GroupMessage {
   sender_id: string;
   content: string;
   created_at: string;
-  /** 'linkedin' = a LinkedIn card rendered from the sender's shared link. */
-  kind?: 'text' | 'linkedin';
+  /** 'linkedin' = a LinkedIn card rendered from the sender's shared link; 'poll' = a quick poll (poll_id). */
+  kind?: 'text' | 'linkedin' | 'poll';
+  poll_id?: string | null;
+}
+
+/** A reaction row; emoji = null means it was removed. Exactly one of the two message ids is set. */
+export interface Reaction {
+  id: string;
+  message_id: string | null;
+  group_message_id: string | null;
+  user_id: string;
+  emoji: string | null;
+}
+
+export interface PollOption {
+  id: string;
+  poll_id: string;
+  position: number;
+  label: string;
+}
+
+export interface GroupPoll {
+  id: string;
+  group_id: string;
+  created_by: string | null;
+  question: string;
+  created_at: string;
+  options: PollOption[];
 }

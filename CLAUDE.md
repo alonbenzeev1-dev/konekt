@@ -16,6 +16,7 @@ Commands: `npm run dev`, `npm run build` (`tsc -b && vite build`; must be clean 
 - `supabase/migrations/read_state.sql` server-side read state: group_members.last_read_at, chat_reads, mark_chat_read / mark_group_read
 - `supabase/migrations/mutual_approval.sql` respond_request(request_id, accept, share_back)
 - `supabase/migrations/rooms_invites.sql` groups become rooms: description + place, invite_code (QR / ?join=<code>), 200 members, LinkedIn cards (share_linkedin_in_group), separate share_instagram
+- `supabase/migrations/chat_engagement.sql` message_reactions (direct + room, one per person), quick polls (group_polls / options / votes), groups.pinned_message_id, realtime publication; all writes via RPCs (react_to_message, create_group_poll, vote_group_poll, pin_group_message)
 - `supabase/migrations/current_intent.sql` profiles.current_intent (+ current_intent_at set by a trigger); get_nearby_users / get_group_members / get_public_profiles return it while fresh (8 h)
 - `supabase/migrations/campus_tags.sql` profiles.tags (max 3) + get_nearby_users returning tags
 - `supabase/functions/` import-avatar, push
@@ -31,6 +32,11 @@ Commands: `npm run dev`, `npm run build` (`tsc -b && vite build`; must be clean 
 
 ## Live status ("מה הקטע שלך כרגע?")
 - Max 60 chars, shown on nearby cards, in room member lists and as a one-tap opener (fills the message box, never sends). It expires 8 h after it was set: the 8 h lives in current_intent.sql and in INTENT_TTL_MS (src/lib/intent.ts). Edit it with <TypewriterInput> (typewriter placeholder; respects reduced motion).
+
+## Chat engagement
+- Realtime: every table a chat listens to must be in the supabase_realtime publication. Never subscribe to DELETE on tables with RLS (Realtime does not filter DELETE): removing a reaction is an UPDATE to NULL, votes can only change.
+- Scrolling: useStickToBottom keeps you at the bottom only if you were already near it (or you sent the message); otherwise a "new messages" button appears.
+- Message actions (tap / long-press a bubble): six quick reactions, plus "pin" for the room creator.
 
 ## Rooms and invites
 - Invite URL is `https://konekt-nu.vercel.app/?join=<code>` (fixed origin). `capturePendingJoin()` (src/lib/invite.ts) stores the code in localStorage on first load and strips it from the URL, so it survives the LinkedIn redirect and onboarding. A brand-new member who arrived through an invite auto-joins; anyone else gets a one-tap "join this room?" card (`JoinInvite`).

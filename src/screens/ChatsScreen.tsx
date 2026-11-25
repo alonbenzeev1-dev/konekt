@@ -4,6 +4,7 @@ import { Avatar } from '../components/Avatar';
 import { CreateGroupSheet, type GroupCandidate } from '../components/CreateGroupSheet';
 import { Segmented } from '../components/Segmented';
 import { useNow } from '../hooks/useNow';
+import { messagePreview } from '../lib/chatText';
 import { formatClock, formatHoursLeft, msLeft } from '../lib/time';
 import type { Inbox as InboxData } from '../hooks/useInbox';
 import type { GroupsData } from '../hooks/useGroups';
@@ -144,7 +145,7 @@ export function ChatsScreen({ myId, inbox, groups, candidates, onOpenChat, onOpe
                         )}
                         <span className="mt-0.5 flex items-center justify-between gap-2">
                           <span className={`truncate text-sm ${unread ? 'font-semibold text-ink' : 'text-muted'}`}>
-                            {last ? `${who ? who + ': ' : ''}${last.content}` : count ? `${count} חברים · עוד אין הודעות` : 'עוד אין הודעות'}
+                            {last ? `${who ? who + ': ' : ''}${messagePreview(last)}` : count ? `${count} חברים · עוד אין הודעות` : 'עוד אין הודעות'}
                           </span>
                           {unread > 0 && (
                             <span dir="ltr" className="shrink-0 rounded-full bg-cta px-1.5 text-[11px] leading-5 font-bold text-white tabular-nums">{unread}</span>

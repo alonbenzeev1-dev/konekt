@@ -1,15 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, Check, ChevronLeft, Instagram, Linkedin, Loader2, LogOut, MapPin, MessageCircle, QrCode, SendHorizontal, UserPlus, Users } from 'lucide-react';
+import { ArrowDown, ArrowRight, BarChart3, Check, ChevronLeft, Instagram, Linkedin, Loader2, LogOut, MapPin, MessageCircle, Pin, PinOff, Plus, QrCode, SendHorizontal, Smile, UserPlus, Users } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
 import { BottomSheet } from '../components/BottomSheet';
 import { AddMembersSheet, type GroupCandidate } from '../components/CreateGroupSheet';
+import { EmojiPicker, insertAtCursor } from '../components/EmojiPicker';
 import { InviteSheet } from '../components/InviteSheet';
+import { MessageActions } from '../components/MessageActions';
+import { Openable } from '../components/Openable';
+import { PinnedBar } from '../components/PinnedBar';
+import { PollCard } from '../components/PollCard';
+import { PollSheet } from '../components/PollSheet';
+import { ReactionPills } from '../components/ReactionPills';
 import { ctaBase } from '../components/StudentCard';
+import { useStickToBottom } from '../hooks/useStickToBottom';
+import { firstUrl, messagePreview } from '../lib/chatText';
 import { toast } from '../lib/notify';
+import { groupKey, reactionPills } from '../lib/reactions';
 import { instagramUrl, normalizeInstagram, safeProfileUrl } from '../lib/social';
 import { formatClock } from '../lib/time';
 import { MAX_GROUP_MEMBERS, type GroupsData } from '../hooks/useGroups';
-import type { GroupMember, Platform } from '../lib/types';
+import type { GroupMember, GroupMessage, Platform } from '../lib/types';
 
 interface Props {
   myId: string;
@@ -66,7 +76,12 @@ export function GroupChat({ myId, groupId, groups, candidates, myLinks, onBack }
   const [adding, setAdding] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [sharing, setSharing] = useState(false);
-  const endRef = useRef<HTMLDivElement>(null);
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [pollOpen, setPollOpen] = useState(false);
+  const [actionFor, setActionFor] = useState<GroupMessage | null>(null);
+  const [highlight, setHighlight] = useState<string | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const group = groups.groups.find((g) => g.id === groupId);
   const members = useMemo(() => groups.members[groupId] ?? [], [groups.members, groupId]);
@@ -80,6 +95,10 @@ export function GroupChat({ myId, groupId, groups, candidates, myLinks, onBack }
     const inGroup = new Set(members.map((m) => m.member_id));
     return candidates.filter((c) => !inGroup.has(c.id));
   }, [members, candidates]);
+
+  const isCreator = !!group && group.created_by === myId;
+  const pinned = group?.pinned_message_id ? msgs.find((m) => m.id === group.pinned_message_id) : undefined;
+  const { mainRef, endRef, onScroll, unseen, jump } = useStickToBottom(msgs.length, msgs[msgs.length - 1]?.sender_id === myId);
 
   const { refreshMembers } = groups;
   const openMembers = () => {
@@ -101,7 +120,6 @@ export function GroupChat({ myId, groupId, groups, candidates, myLinks, onBack }
   const { markRead } = groups;
   useEffect(() => {
     if (document.visibilityState === 'visible') markRead(groupId); // opening it, or a message arriving while I look
-    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [msgs.length, groupId, markRead]);
 
   // coming back to the app with this group open
@@ -131,6 +149,23 @@ export function GroupChat({ myId, groupId, groups, candidates, myLinks, onBack }
     else setText('');
   };
 
+  /** Emoji goes where the caret is, the field keeps focus, the caret lands after it. */
+  const pickEmoji = (emoji: string) => {
+    const { next, caret } = insertAtCursor(inputRef.current, text, emoji, 1000);
+    setText(next);
+    requestAnimationFrame(() => {
+      const el = inputRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(caret, caret);
+    });
+  };
+
+  const react = async (messageId: string, emoji: string) => {
+    const { error } = await groups.react(messageId, emoji);
+    if (error) toast('התגובה לא נשלחה', 'error');
+  };
+
   /** "שתף את ה-LinkedIn שלי בחדר": my link becomes visible to the room and a card is posted in the chat. */
   const shareLinkedIn = async () => {
     if (sharing) return;
@@ -145,6 +180,26 @@ export function GroupChat({ myId, groupId, groups, candidates, myLinks, onBack }
     const { error } = await groups.setShare(groupId, false);
     if (!error) toast('הפסקת לשתף את ה-LinkedIn בחדר', 'info');
   };
+
+  const pin = async (messageId: string | null) => {
+    const { error } = await groups.pinMessage(groupId, messageId);
+    if (!error) toast(messageId ? 'ההודעה נעוצה בראש החדר' : 'הנעיצה הוסרה', 'success');
+  };
+
+  const jumpToPinned = () => {
+    if (!pinned) return;
+    document.getElementById(`gm-${pinned.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setHighlight(pinned.id);
+    window.setTimeout(() => setHighlight(null), 1600);
+  };
+
+  const togglePanel = (which: 'emoji' | 'menu') => {
+    setEmojiOpen(which === 'emoji' ? (v) => !v : false);
+    setMenuOpen(which === 'menu' ? (v) => !v : false);
+  };
+  const panelAbove = emojiOpen || menuOpen;
+
+  const pillsOf = (m: GroupMessage) => reactionPills(groups.reactions[groupKey(m.id)], myId);
 
   return (
     <div className="fixed inset-0 z-40 mx-auto flex max-w-[480px] flex-col bg-bg anim-fade">
@@ -181,6 +236,16 @@ export function GroupChat({ myId, groupId, groups, candidates, myLinks, onBack }
           </button>
         </div>
       </header>
+
+      {pinned && (
+        <PinnedBar
+          preview={messagePreview(pinned)}
+          url={pinned.kind === 'poll' || pinned.kind === 'linkedin' ? null : firstUrl(pinned.content)}
+          canUnpin={isCreator}
+          onJump={jumpToPinned}
+          onUnpin={() => void pin(null)}
+        />
+      )}
 
       {/* one tap: share my LinkedIn with everyone in the room */}
       <div className="border-b border-line bg-card px-3 py-2.5">
@@ -220,83 +285,164 @@ export function GroupChat({ myId, groupId, groups, candidates, myLinks, onBack }
         )}
       </div>
 
-      <main className="flex-1 space-y-1.5 overflow-y-auto px-3 py-4">
-        <p className="mx-auto mb-3 w-fit max-w-full rounded-full bg-card px-3 py-1 text-center text-[11px] text-muted shadow-sm">
-          🔒 חדר פרטי · רק החברים רואים את ההודעות
-        </p>
-        {group?.description && <p dir="auto" className="mx-auto mb-3 max-w-[320px] text-center text-xs leading-relaxed text-ink/70">{group.description}</p>}
-        {!group && <p className="pt-6 text-center text-sm text-muted">החדר לא זמין.</p>}
-        {group && msgs.length === 0 && <p className="pt-6 text-center text-sm text-muted">עוד אין הודעות. תפתחו את השיחה 👋</p>}
-        {msgs.map((m, i) => {
-          const mine = m.sender_id === myId;
-          const first = msgs[i - 1]?.sender_id !== m.sender_id;
-          const sender = byId.get(m.sender_id);
-          const avatar = (
-            <span className="me-2 mt-auto w-7 shrink-0">
-              {first ? <Avatar url={sender?.avatar_url ?? null} name={sender?.first_name ?? '?'} size={28} /> : null}
-            </span>
-          );
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <main ref={mainRef} onScroll={onScroll} className="flex-1 space-y-1.5 overflow-y-auto overscroll-contain px-3 py-4">
+          <p className="mx-auto mb-3 w-fit max-w-full rounded-full bg-card px-3 py-1 text-center text-[11px] text-muted shadow-sm">
+            🔒 חדר פרטי · רק החברים רואים את ההודעות
+          </p>
+          {group?.description && <p dir="auto" className="mx-auto mb-3 max-w-[320px] text-center text-xs leading-relaxed text-ink/70">{group.description}</p>}
+          {!group && <p className="pt-6 text-center text-sm text-muted">החדר לא זמין.</p>}
+          {group && msgs.length === 0 && <p className="pt-6 text-center text-sm text-muted">עוד אין הודעות. תפתחו את השיחה 👋</p>}
+          {msgs.map((m, i) => {
+            const mine = m.sender_id === myId;
+            const first = msgs[i - 1]?.sender_id !== m.sender_id;
+            const sender = byId.get(m.sender_id);
+            const lit = highlight === m.id ? 'rounded-2xl ring-2 ring-primary ring-offset-2 ring-offset-bg transition-shadow' : '';
+            const avatar = (
+              <span className="me-2 mt-auto w-7 shrink-0">
+                {first ? <Avatar url={sender?.avatar_url ?? null} name={sender?.first_name ?? '?'} size={28} /> : null}
+              </span>
+            );
+            const pills = <ReactionPills pills={pillsOf(m)} mine={mine} onToggle={(e) => void react(m.id, e)} />;
+            const column = `flex min-w-0 flex-col gap-1 ${mine ? 'items-end' : 'items-start'}`;
 
-          if (m.kind === 'linkedin') {
-            const li = sender ? safeProfileUrl(sender.linkedin_url) : null;
-            return (
-              <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'} pt-2`}>
-                {!mine && avatar}
-                <div className="w-[82%] max-w-[300px] rounded-2xl border border-[#0A66C2]/20 bg-card p-3 shadow-sm">
-                  <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold text-[#0A66C2]">
-                    <Linkedin size={13} /> {mine ? 'שיתפת את ה-LinkedIn שלך' : 'שיתף/ה את ה-LinkedIn'}
-                  </p>
-                  <div className="flex items-center gap-2.5">
-                    <Avatar url={sender?.avatar_url ?? null} name={sender?.first_name ?? '?'} size={44} />
-                    <span className="min-w-0 flex-1">
-                      <span dir="auto" className="block truncate text-right font-bold text-ink">{sender?.first_name ?? 'מישהו'}</span>
-                      {sender?.headline && <span dir="auto" className="line-clamp-2 block text-right text-xs leading-snug text-ink/70">{sender.headline}</span>}
-                    </span>
+            if (m.kind === 'poll') {
+              return (
+                <div key={m.id} id={`gm-${m.id}`} className={`flex ${mine ? 'justify-end' : 'justify-start'} pt-2`}>
+                  {!mine && avatar}
+                  <div className={`${column} w-full`}>
+                    <Openable onOpen={() => setActionFor(m)} className={`w-full ${mine ? 'flex justify-end' : 'flex justify-start'} ${lit}`}>
+                      <PollCard
+                        poll={m.poll_id ? groups.polls[m.poll_id] : undefined}
+                        votes={m.poll_id ? groups.votes[m.poll_id] : undefined}
+                        myId={myId}
+                        by={mine ? 'את/ה' : (sender?.first_name ?? 'מישהו')}
+                        onVote={(o) => m.poll_id && void groups.votePoll(m.poll_id, o)}
+                      />
+                    </Openable>
+                    {pills}
                   </div>
-                  {li ? (
-                    <a
-                      href={li}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={`${ctaBase} mt-2.5 bg-[#0A66C2] text-white active:scale-[0.98]`}
-                    >
-                      <Linkedin size={16} /> פתח ב-LinkedIn ↗
-                    </a>
-                  ) : (
-                    <p className="mt-2.5 rounded-xl bg-bg px-3 py-2 text-center text-xs text-muted">הקישור כבר לא משותף בחדר</p>
-                  )}
-                  <p className="mt-1.5 text-[10px] text-muted tabular-nums">{formatClock(m.created_at)}</p>
+                </div>
+              );
+            }
+
+            if (m.kind === 'linkedin') {
+              const li = sender ? safeProfileUrl(sender.linkedin_url) : null;
+              return (
+                <div key={m.id} id={`gm-${m.id}`} className={`flex ${mine ? 'justify-end' : 'justify-start'} pt-2`}>
+                  {!mine && avatar}
+                  <div className={column}>
+                    <Openable onOpen={() => setActionFor(m)} className={`w-[82%] min-w-[240px] max-w-[300px] rounded-2xl border border-[#0A66C2]/20 bg-card p-3 shadow-sm ${lit}`}>
+                      <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold text-[#0A66C2]">
+                        <Linkedin size={13} /> {mine ? 'שיתפת את ה-LinkedIn שלך' : 'שיתף/ה את ה-LinkedIn'}
+                      </p>
+                      <div className="flex items-center gap-2.5">
+                        <Avatar url={sender?.avatar_url ?? null} name={sender?.first_name ?? '?'} size={44} />
+                        <span className="min-w-0 flex-1">
+                          <span dir="auto" className="block truncate text-right font-bold text-ink">{sender?.first_name ?? 'מישהו'}</span>
+                          {sender?.headline && <span dir="auto" className="line-clamp-2 block text-right text-xs leading-snug text-ink/70">{sender.headline}</span>}
+                        </span>
+                      </div>
+                      {li ? (
+                        <a
+                          href={li}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className={`${ctaBase} mt-2.5 bg-[#0A66C2] text-white active:scale-[0.98]`}
+                        >
+                          <Linkedin size={16} /> פתח ב-LinkedIn ↗
+                        </a>
+                      ) : (
+                        <p className="mt-2.5 rounded-xl bg-bg px-3 py-2 text-center text-xs text-muted">הקישור כבר לא משותף בחדר</p>
+                      )}
+                      <p className="mt-1.5 text-[10px] text-muted tabular-nums">{formatClock(m.created_at)}</p>
+                    </Openable>
+                    {pills}
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <div key={m.id} id={`gm-${m.id}`} className={`flex ${mine ? 'justify-end' : 'justify-start'} ${first ? 'pt-2' : ''}`}>
+                {!mine && avatar}
+                <div className={`${column} max-w-[78%]`}>
+                  <Openable
+                    onOpen={() => setActionFor(m)}
+                    className={`rounded-2xl px-3.5 py-2 text-[15px] leading-snug shadow-sm ${
+                      mine ? 'rounded-se-md bg-cta text-white' : 'rounded-ss-md bg-card text-ink'
+                    } ${lit}`}
+                  >
+                    {!mine && first && <p className="mb-0.5 text-[12px] font-bold text-cta-press">{sender?.first_name ?? 'מישהו'}</p>}
+                    <p className="whitespace-pre-wrap break-words">{m.content}</p>
+                    <p className={`mt-0.5 text-[10px] tabular-nums ${mine ? 'text-white/80' : 'text-muted'}`}>{formatClock(m.created_at)}</p>
+                  </Openable>
+                  {pills}
                 </div>
               </div>
             );
-          }
+          })}
+          <div ref={endRef} />
+        </main>
 
-          return (
-            <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'} ${first ? 'pt-2' : ''}`}>
-              {!mine && avatar}
-              <div
-                className={`max-w-[78%] rounded-2xl px-3.5 py-2 text-[15px] leading-snug shadow-sm ${
-                  mine ? 'rounded-se-md bg-cta text-white' : 'rounded-ss-md bg-card text-ink'
-                }`}
-              >
-                {!mine && first && <p className="mb-0.5 text-[12px] font-bold text-cta-press">{sender?.first_name ?? 'מישהו'}</p>}
-                <p className="whitespace-pre-wrap break-words">{m.content}</p>
-                <p className={`mt-0.5 text-[10px] tabular-nums ${mine ? 'text-white/80' : 'text-muted'}`}>{formatClock(m.created_at)}</p>
-              </div>
-            </div>
-          );
-        })}
-        <div ref={endRef} />
-      </main>
+        {unseen > 0 && (
+          <button
+            onClick={jump}
+            className="absolute bottom-3 left-1/2 flex min-h-[44px] -translate-x-1/2 items-center gap-1.5 rounded-full border border-line bg-card px-4 text-sm font-bold text-cta-press shadow-md active:scale-[0.97]"
+          >
+            <ArrowDown size={16} /> {unseen === 1 ? 'הודעה חדשה' : `${unseen} הודעות חדשות`}
+          </button>
+        )}
+      </div>
+
+      {emojiOpen && <EmojiPicker onPick={pickEmoji} />}
+      {menuOpen && (
+        <div className="border-t border-line bg-card px-3 py-1.5" role="menu" aria-label="פעולות">
+          <button
+            role="menuitem"
+            onClick={() => {
+              setMenuOpen(false);
+              setPollOpen(true);
+            }}
+            className="flex min-h-[44px] w-full items-center gap-3 rounded-xl px-3 text-start text-sm font-bold text-ink active:bg-bg"
+          >
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-soft text-cta"><BarChart3 size={16} /></span>
+            סקר מהיר
+          </button>
+        </div>
+      )}
 
       <form
         onSubmit={(e) => {
           e.preventDefault();
           void send();
         }}
-        className="flex items-end gap-2 border-t border-line bg-card px-3 pt-2.5 safe-bottom"
+        className={`flex items-end gap-1 bg-card px-3 pt-2.5 safe-bottom ${panelAbove ? '' : 'border-t border-line'}`}
       >
+        <button
+          type="button"
+          aria-label="עוד פעולות"
+          aria-expanded={menuOpen}
+          disabled={!group}
+          onClick={() => togglePanel('menu')}
+          className={`mb-0.5 flex h-[46px] w-11 shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-40 ${menuOpen ? 'bg-primary-soft text-cta' : 'text-muted active:bg-bg'}`}
+        >
+          <Plus size={23} className={`transition-transform duration-200 ${menuOpen ? 'rotate-45' : ''}`} />
+        </button>
+        <button
+          type="button"
+          aria-label="אימוג׳י"
+          aria-pressed={emojiOpen}
+          disabled={!group}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => togglePanel('emoji')}
+          className={`mb-0.5 flex h-[46px] w-11 shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-40 ${emojiOpen ? 'bg-primary-soft text-cta' : 'text-muted active:bg-bg'}`}
+        >
+          <Smile size={23} />
+        </button>
         <textarea
+          ref={inputRef}
           rows={1}
           value={text}
           maxLength={1000}
@@ -309,7 +455,7 @@ export function GroupChat({ myId, groupId, groups, candidates, myLinks, onBack }
             }
           }}
           placeholder="כתבו הודעה לחדר…"
-          className="field max-h-32 min-h-[46px] flex-1 resize-none !rounded-3xl !bg-bg !py-2.5"
+          className="field max-h-32 min-h-[46px] min-w-0 flex-1 resize-none !rounded-3xl !bg-bg !py-2.5"
         />
         <button
           type="submit"
@@ -320,6 +466,29 @@ export function GroupChat({ myId, groupId, groups, candidates, myLinks, onBack }
           <SendHorizontal size={19} className="-scale-x-100" />
         </button>
       </form>
+
+      <MessageActions
+        open={!!actionFor}
+        onClose={() => setActionFor(null)}
+        preview={actionFor ? messagePreview(actionFor) : ''}
+        myReaction={actionFor ? (groups.reactions[groupKey(actionFor.id)]?.[myId] ?? null) : null}
+        onReact={(e) => actionFor && void react(actionFor.id, e)}
+      >
+        {isCreator && actionFor && (
+          <button
+            onClick={() => {
+              void pin(pinned?.id === actionFor.id ? null : actionFor.id);
+              setActionFor(null);
+            }}
+            className="btn-ghost flex w-full items-center justify-center gap-2 text-sm font-bold text-ink"
+          >
+            {pinned?.id === actionFor.id ? <PinOff size={17} /> : <Pin size={17} />}
+            {pinned?.id === actionFor.id ? 'הסרת נעיצה' : 'נעיצת הודעה'}
+          </button>
+        )}
+      </MessageActions>
+
+      <PollSheet open={pollOpen} onClose={() => setPollOpen(false)} onCreate={(q, o) => groups.createPoll(groupId, q, o)} />
 
       <BottomSheet open={showMembers} onClose={() => setShowMembers(false)}>
         <h3 className="text-lg font-extrabold text-ink">

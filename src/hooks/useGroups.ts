@@ -3,7 +3,15 @@ import { supabase } from '../lib/supabase';
 import { alertIncoming, toast } from '../lib/notify';
 import { isLater, loadReads, mergeReads, saveReads, type ReadMap } from '../lib/reads';
 import { isMissingFunction } from '../lib/rpc';
-import type { Group, GroupMember, GroupMessage } from '../lib/types';
+import { groupKey, toggledReaction, withReaction, type ReactionMap } from '../lib/reactions';
+import { messagePreview } from '../lib/chatText';
+import type { Group, GroupMember, GroupMessage, GroupPoll, PollOption, Reaction } from '../lib/types';
+
+type PollRow = Omit<GroupPoll, 'options'> & { group_poll_options?: PollOption[] };
+const toPoll = (row: PollRow): GroupPoll => {
+  const { group_poll_options, ...rest } = row;
+  return { ...rest, options: [...(group_poll_options ?? [])].sort((a, b) => a.position - b.position) };
+};
 
 /** Local mirror of group_members.last_read_at: fallback while offline / before the read_state migration. */
 const GROUP_READ_KEY = 'konekt-group-read';
@@ -36,6 +44,15 @@ export function useGroups(userId: string | null, activeGroupId: string | null) {
   const [groups, setGroups] = useState<Group[]>([]);
   const [members, setMembers] = useState<Record<string, GroupMember[]>>({});
   const [messages, setMessages] = useState<GroupMessage[]>([]);
+  const [reactions, setReactions] = useState<ReactionMap>({});
+  const [polls, setPolls] = useState<Record<string, GroupPoll>>({});
+  const [votes, setVotes] = useState<Record<string, Record<string, string>>>({}); // poll → person → option
+  const reactionsRef = useRef(reactions);
+  reactionsRef.current = reactions;
+  const pollsRef = useRef(polls);
+  pollsRef.current = polls;
+  const votesRef = useRef(votes);
+  votesRef.current = votes;
   const [reads, setReads] = useState<ReadMap>(() => loadReads(GROUP_READ_KEY));
   const readsRef = useRef(reads);
   readsRef.current = reads;
@@ -61,16 +78,30 @@ export function useGroups(userId: string | null, activeGroupId: string | null) {
 
   const load = useCallback(async () => {
     if (!userId) return;
-    const [g, m, mine] = await Promise.all([
+    const [g, m, mine, rx, pl, vt] = await Promise.all([
       supabase.from('groups').select('*').order('created_at', { ascending: false }),
       supabase.from('group_messages').select('*').order('created_at', { ascending: true }).limit(2000),
       supabase.from('group_members').select('group_id,last_read_at').eq('user_id', userId),
+      supabase.from('message_reactions').select('*').not('group_message_id', 'is', null).not('emoji', 'is', null),
+      supabase.from('group_polls').select('*, group_poll_options(*)'),
+      supabase.from('group_poll_votes').select('*'),
     ]);
     if (g.error) return; // e.g. migration not applied yet — groups simply stay empty
     const gs = (g.data ?? []) as Group[];
     const msgs = (m.data ?? []) as GroupMessage[];
     setGroups(gs);
     setMessages(msgs);
+    if (!rx.error && rx.data) {
+      let map: ReactionMap = {};
+      for (const x of rx.data as Reaction[]) if (x.group_message_id) map = withReaction(map, groupKey(x.group_message_id), x.user_id, x.emoji);
+      setReactions(map);
+    }
+    if (!pl.error && pl.data) setPolls(Object.fromEntries((pl.data as PollRow[]).map((r) => [r.id, toPoll(r)])));
+    if (!vt.error && vt.data) {
+      const byPoll: Record<string, Record<string, string>> = {};
+      for (const x of vt.data as { poll_id: string; user_id: string; option_id: string }[]) (byPoll[x.poll_id] ??= {})[x.user_id] = x.option_id;
+      setVotes(byPoll);
+    }
     const fromServer = mine.error
       ? []
       : (mine.data as { group_id: string; last_read_at: string | null }[])
@@ -87,6 +118,20 @@ export function useGroups(userId: string | null, activeGroupId: string | null) {
     });
     await Promise.all(gs.map((x) => loadMembers(x.id)));
   }, [userId, loadMembers]);
+
+  /** One poll with its options and votes: used when a poll message arrives (or was just created) before the list knows it. */
+  const loadPoll = useCallback(async (pollId: string) => {
+    const [p, v] = await Promise.all([
+      supabase.from('group_polls').select('*, group_poll_options(*)').eq('id', pollId).maybeSingle(),
+      supabase.from('group_poll_votes').select('*').eq('poll_id', pollId),
+    ]);
+    if (p.data) setPolls((prev) => ({ ...prev, [pollId]: toPoll(p.data as PollRow) }));
+    if (v.data) {
+      const byUser: Record<string, string> = {};
+      for (const x of v.data as { user_id: string; option_id: string }[]) byUser[x.user_id] = x.option_id;
+      setVotes((prev) => ({ ...prev, [pollId]: byUser }));
+    }
+  }, []);
 
   useEffect(() => {
     void load();
@@ -122,6 +167,13 @@ export function useGroups(userId: string | null, activeGroupId: string | null) {
       }
     };
 
+    const onReaction = (row: Reaction) => {
+      if (!row.group_message_id) return; // direct-message reactions are handled by useInbox
+      setReactions((prev) => withReaction(prev, groupKey(row.group_message_id as string), row.user_id, row.emoji));
+    };
+    const onVote = (row: { poll_id: string; user_id: string; option_id: string }) =>
+      setVotes((prev) => ({ ...prev, [row.poll_id]: { ...prev[row.poll_id], [row.user_id]: row.option_id } }));
+
     const channel = supabase
       .channel(`groups:${userId}`)
       // INSERT/UPDATE only: Realtime does not apply RLS to DELETE events, so leaves are picked up on open/refocus instead.
@@ -130,17 +182,28 @@ export function useGroups(userId: string | null, activeGroupId: string | null) {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_messages' }, (payload) => {
         const msg = payload.new as GroupMessage;
         setMessages((prev) => (prev.some((x) => x.id === msg.id) ? prev : [...prev, msg]));
+        if (msg.kind === 'poll' && msg.poll_id && !pollsRef.current[msg.poll_id]) void loadPoll(msg.poll_id);
         if (msg.sender_id === userId) return;
         if (activeRef.current === msg.group_id && document.visibilityState === 'visible') return; // already reading it
         const g = groupsRef.current.find((x) => x.id === msg.group_id);
         const who = membersRef.current[msg.group_id]?.find((x) => x.member_id === msg.sender_id)?.first_name ?? 'מישהו';
-        void alertIncoming(g?.name ?? 'קבוצה', `${who}: ${msg.content.slice(0, 80)}`, `gmsg-${msg.group_id}`);
+        void alertIncoming(g?.name ?? 'קבוצה', `${who}: ${messagePreview(msg).slice(0, 80)}`, `gmsg-${msg.group_id}`);
       })
+      // pin / unpin by the creator
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'groups' }, (p) => {
+        const row = p.new as Group;
+        setGroups((prev) => prev.map((g) => (g.id === row.id ? { ...g, ...row } : g)));
+      })
+      // reactions and votes: INSERT / UPDATE only (DELETE events are not filtered by RLS; removal is an UPDATE to NULL)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'message_reactions' }, (p) => onReaction(p.new as Reaction))
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'message_reactions' }, (p) => onReaction(p.new as Reaction))
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_poll_votes' }, (p) => onVote(p.new as { poll_id: string; user_id: string; option_id: string }))
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'group_poll_votes' }, (p) => onVote(p.new as { poll_id: string; user_id: string; option_id: string }))
       .subscribe();
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [userId, load, loadMembers]);
+  }, [userId, load, loadMembers, loadPoll]);
 
   const create = useCallback(
     async (
@@ -324,6 +387,75 @@ export function useGroups(userId: string | null, activeGroupId: string | null) {
     [userId, loadMembers],
   );
 
+  /** React to a room message with one of the quick emojis (same emoji again removes it). Optimistic, rolled back on error. */
+  const react = useCallback(
+    async (messageId: string, emoji: string): Promise<Result> => {
+      if (!userId) return { error: 'not signed in' };
+      const key = groupKey(messageId);
+      const before = reactionsRef.current[key]?.[userId] ?? null;
+      setReactions((prev) => withReaction(prev, key, userId, toggledReaction(prev, key, userId, emoji)));
+      const { data, error } = await supabase.rpc('react_to_message', { p_group_message: messageId, p_emoji: emoji });
+      if (error) {
+        setReactions((prev) => withReaction(prev, key, userId, before));
+        return { error: error.message };
+      }
+      setReactions((prev) => withReaction(prev, key, userId, typeof data === 'string' ? data : null));
+      return { error: null };
+    },
+    [userId],
+  );
+
+  /** "סקר מהיר": a question (≤80) and 2-4 options (≤40 each), posted into the room. */
+  const createPoll = useCallback(
+    async (groupId: string, question: string, options: string[]): Promise<Result> => {
+      const { data, error } = await supabase.rpc('create_group_poll', { grp: groupId, poll_question: question, poll_options: options });
+      if (error) return { error: error.message };
+      const msg = data as GroupMessage;
+      if (msg.poll_id) await loadPoll(msg.poll_id);
+      setMessages((prev) => (prev.some((x) => x.id === msg.id) ? prev : [...prev, msg]));
+      return { error: null };
+    },
+    [loadPoll],
+  );
+
+  /** One tap votes, another option changes the vote. */
+  const votePoll = useCallback(
+    async (pollId: string, optionId: string): Promise<Result> => {
+      if (!userId) return { error: 'not signed in' };
+      const before = votesRef.current[pollId]?.[userId];
+      const put = (option: string | undefined) =>
+        setVotes((prev) => {
+          const users = { ...(prev[pollId] ?? {}) };
+          if (option) users[userId] = option;
+          else delete users[userId];
+          return { ...prev, [pollId]: users };
+        });
+      put(optionId);
+      const { error } = await supabase.rpc('vote_group_poll', { p_poll: pollId, p_option: optionId });
+      if (error) {
+        put(before);
+        toast('ההצבעה לא נקלטה. נסו שוב.', 'error');
+        return { error: error.message };
+      }
+      return { error: null };
+    },
+    [userId],
+  );
+
+  /** Creator only: pin a message (one per room), or pass null to remove the pin. */
+  const pinMessage = useCallback(async (groupId: string, messageId: string | null): Promise<Result> => {
+    const before = groupsRef.current.find((g) => g.id === groupId)?.pinned_message_id ?? null;
+    const put = (id: string | null) => setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, pinned_message_id: id } : g)));
+    put(messageId);
+    const { error } = await supabase.rpc('pin_group_message', { grp: groupId, msg: messageId });
+    if (error) {
+      put(before);
+      toast('לא הצלחנו לעדכן את הנעיצה', 'error');
+      return { error: error.message };
+    }
+    return { error: null };
+  }, []);
+
   const summaries = useMemo<GroupSummary[]>(
     () =>
       groups
@@ -351,6 +483,13 @@ export function useGroups(userId: string | null, activeGroupId: string | null) {
     setShare,
     shareLinkedIn,
     setShareInstagram,
+    reactions,
+    react,
+    polls,
+    votes,
+    createPoll,
+    votePoll,
+    pinMessage,
     refresh: load,
     refreshMembers: loadMembers,
   };

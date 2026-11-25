@@ -1,11 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, Ban, Hourglass, SendHorizontal } from 'lucide-react';
+import { ArrowDown, ArrowRight, Ban, Hourglass, SendHorizontal, Smile } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
+import { EmojiPicker, insertAtCursor } from '../components/EmojiPicker';
+import { MessageActions } from '../components/MessageActions';
+import { Openable } from '../components/Openable';
+import { ReactionPills } from '../components/ReactionPills';
 import { useNow } from '../hooks/useNow';
+import { useStickToBottom } from '../hooks/useStickToBottom';
 import { intentIcebreaker } from '../lib/intent';
 import { toast } from '../lib/notify';
+import { directKey, reactionPills } from '../lib/reactions';
 import { formatClock, formatHoursLeft, msLeft } from '../lib/time';
 import type { Inbox } from '../hooks/useInbox';
+import type { Message } from '../lib/types';
 
 interface Props {
   myId: string;
@@ -20,7 +27,8 @@ export function Chat({ myId, chatId, inbox, onBack }: Props) {
   const now = useNow(30_000);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
-  const endRef = useRef<HTMLDivElement>(null);
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const [actionFor, setActionFor] = useState<Message | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const thread = inbox.threads.find((t) => t.chat.id === chatId);
@@ -29,6 +37,7 @@ export function Chat({ myId, chatId, inbox, onBack }: Props) {
   const name = partner?.first_name ?? '…';
 
   const msgs = useMemo(() => inbox.messages.filter((m) => m.chat_id === chatId), [inbox.messages, chatId]);
+  const { mainRef, endRef, onScroll, unseen, jump } = useStickToBottom(msgs.length, msgs[msgs.length - 1]?.sender_id === myId);
 
   // what they wrote as their status: a natural first line, offered until I have said something myself
   const partnerIntent = partner?.current_intent?.trim() || null;
@@ -38,7 +47,6 @@ export function Chat({ myId, chatId, inbox, onBack }: Props) {
   const { markRead } = inbox;
   useEffect(() => {
     if (document.visibilityState === 'visible') markRead(chatId); // a message that arrives while I'm looking at it
-    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [msgs.length, chatId, markRead]);
 
   // coming back to the app with this chat open
@@ -68,6 +76,23 @@ export function Chat({ myId, chatId, inbox, onBack }: Props) {
   };
   const send = () => sendText(text.trim());
 
+  /** Emoji goes where the caret is, the field keeps focus, the caret lands after it. */
+  const pickEmoji = (emoji: string) => {
+    const { next, caret } = insertAtCursor(inputRef.current, text, emoji, 1000);
+    setText(next);
+    requestAnimationFrame(() => {
+      const el = inputRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(caret, caret);
+    });
+  };
+
+  const react = async (messageId: string, emoji: string) => {
+    const { error } = await inbox.react(messageId, emoji);
+    if (error) toast('התגובה לא נשלחה', 'error');
+  };
+
   const block = async () => {
     if (!thread || !window.confirm(`לחסום את ${name}? הצ׳אט יימחק ולא תראו זה את זה יותר.`)) return;
     const { error } = await inbox.block(thread.partnerId);
@@ -76,10 +101,11 @@ export function Chat({ myId, chatId, inbox, onBack }: Props) {
     history.back();
   };
 
+  const panelAbove = emojiOpen && open;
   return (
     <div className="fixed inset-0 z-40 mx-auto flex max-w-[480px] flex-col bg-bg anim-fade">
       <header className="flex items-center gap-3 border-b border-line bg-card px-3 pb-3 safe-top">
-        <button onClick={() => history.back()} className="rounded-full p-2 text-ink active:bg-bg" aria-label="חזרה">
+        <button onClick={() => history.back()} className="flex h-11 w-11 items-center justify-center rounded-full text-ink active:bg-bg" aria-label="חזרה">
           <ArrowRight size={22} />
         </button>
         <Avatar url={partner?.avatar_url ?? null} name={name} size={40} live={open} />
@@ -91,37 +117,49 @@ export function Chat({ myId, chatId, inbox, onBack }: Props) {
           </p>
         </div>
         {open && (
-          <button onClick={block} className="rounded-full p-2 text-muted active:bg-bg" aria-label="חסימה">
+          <button onClick={block} className="flex h-11 w-11 items-center justify-center rounded-full text-muted active:bg-bg" aria-label="חסימה">
             <Ban size={19} />
           </button>
         )}
       </header>
 
-      <main className="flex-1 space-y-1.5 overflow-y-auto px-3 py-4">
-        <p className="mx-auto mb-3 w-fit rounded-full bg-card px-3 py-1 text-center text-[11px] text-muted shadow-sm">
-          🔒 שניכם אישרתם · הצ׳אט נמחק אוטומטית 24 שעות אחרי שנפתח
-        </p>
-        {msgs.map((m, i) => {
-          const mine = m.sender_id === myId;
-          const grouped = msgs[i - 1]?.sender_id === m.sender_id;
-          return (
-            <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'} ${grouped ? '' : 'pt-2'}`}>
-              <div
-                className={`max-w-[78%] rounded-2xl px-3.5 py-2 text-[15px] leading-snug shadow-sm ${
-                  mine ? 'rounded-se-md bg-cta text-white' : 'rounded-ss-md bg-card text-ink'
-                }`}
-              >
-                <p className="whitespace-pre-wrap break-words">{m.content}</p>
-                <p className={`mt-0.5 text-[10px] tabular-nums ${mine ? 'text-white/80' : 'text-muted'}`}>{formatClock(m.created_at)}</p>
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <main ref={mainRef} onScroll={onScroll} className="flex-1 space-y-1.5 overflow-y-auto overscroll-contain px-3 py-4">
+          <p className="mx-auto mb-3 w-fit rounded-full bg-card px-3 py-1 text-center text-[11px] text-muted shadow-sm">
+            🔒 שניכם אישרתם · הצ׳אט נמחק אוטומטית 24 שעות אחרי שנפתח
+          </p>
+          {msgs.map((m, i) => {
+            const mine = m.sender_id === myId;
+            const grouped = msgs[i - 1]?.sender_id === m.sender_id;
+            const pills = reactionPills(inbox.reactions[directKey(m.id)], myId);
+            return (
+              <div key={m.id} id={`dm-${m.id}`} className={`flex flex-col gap-1 ${mine ? 'items-end' : 'items-start'} ${grouped ? '' : 'pt-2'}`}>
+                <Openable
+                  onOpen={() => setActionFor(m)}
+                  className={`max-w-[78%] rounded-2xl px-3.5 py-2 text-[15px] leading-snug shadow-sm ${
+                    mine ? 'rounded-se-md bg-cta text-white' : 'rounded-ss-md bg-card text-ink'
+                  }`}
+                >
+                  <p className="whitespace-pre-wrap break-words">{m.content}</p>
+                  <p className={`mt-0.5 text-[10px] tabular-nums ${mine ? 'text-white/80' : 'text-muted'}`}>{formatClock(m.created_at)}</p>
+                </Openable>
+                <ReactionPills pills={pills} mine={mine} onToggle={(e) => void react(m.id, e)} />
               </div>
-            </div>
-          );
-        })}
-        {!open && (
-          <p className="pt-6 text-center text-sm text-muted">הצ׳אט הזה כבר לא זמין.</p>
+            );
+          })}
+          {!open && <p className="pt-6 text-center text-sm text-muted">הצ׳אט הזה כבר לא זמין.</p>}
+          <div ref={endRef} />
+        </main>
+
+        {unseen > 0 && (
+          <button
+            onClick={jump}
+            className="absolute bottom-3 left-1/2 flex min-h-[44px] -translate-x-1/2 items-center gap-1.5 rounded-full border border-line bg-card px-4 text-sm font-bold text-cta-press shadow-md active:scale-[0.97]"
+          >
+            <ArrowDown size={16} /> {unseen === 1 ? 'הודעה חדשה' : `${unseen} הודעות חדשות`}
+          </button>
         )}
-        <div ref={endRef} />
-      </main>
+      </div>
 
       {intentChip && (
         <div className="border-t border-line bg-card px-3 pt-2.5">
@@ -158,13 +196,26 @@ export function Chat({ myId, chatId, inbox, onBack }: Props) {
         </div>
       )}
 
+      {panelAbove && <EmojiPicker onPick={pickEmoji} />}
+
       <form
         onSubmit={(e) => {
           e.preventDefault();
           void send();
         }}
-        className={`flex items-end gap-2 bg-card px-3 pt-2.5 safe-bottom ${open && (msgs.length === 0 || intentChip) ? '' : 'border-t border-line'}`}
+        className={`flex items-end gap-1.5 bg-card px-3 pt-2.5 safe-bottom ${open && (msgs.length === 0 || intentChip || panelAbove) ? '' : 'border-t border-line'}`}
       >
+        <button
+          type="button"
+          aria-label="אימוג׳י"
+          aria-pressed={emojiOpen}
+          disabled={!open}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => setEmojiOpen((v) => !v)}
+          className={`mb-0.5 flex h-[46px] w-11 shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-40 ${emojiOpen ? 'bg-primary-soft text-cta' : 'text-muted active:bg-bg'}`}
+        >
+          <Smile size={23} />
+        </button>
         <textarea
           ref={inputRef}
           rows={1}
@@ -179,7 +230,7 @@ export function Chat({ myId, chatId, inbox, onBack }: Props) {
             }
           }}
           placeholder={open ? 'כתבו הודעה…' : 'הצ׳אט נסגר'}
-          className="field max-h-32 min-h-[46px] flex-1 resize-none !rounded-3xl !bg-bg !py-2.5"
+          className="field max-h-32 min-h-[46px] min-w-0 flex-1 resize-none !rounded-3xl !bg-bg !py-2.5"
         />
         <button
           type="submit"
@@ -190,6 +241,14 @@ export function Chat({ myId, chatId, inbox, onBack }: Props) {
           <SendHorizontal size={19} className="-scale-x-100" />
         </button>
       </form>
+
+      <MessageActions
+        open={!!actionFor}
+        onClose={() => setActionFor(null)}
+        preview={actionFor?.content ?? ''}
+        myReaction={actionFor ? (inbox.reactions[directKey(actionFor.id)]?.[myId] ?? null) : null}
+        onReact={(e) => actionFor && void react(actionFor.id, e)}
+      />
     </div>
   );
 }

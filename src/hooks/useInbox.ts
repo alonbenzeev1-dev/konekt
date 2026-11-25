@@ -4,7 +4,8 @@ import { alertIncoming } from '../lib/notify';
 import { kindLabel } from '../lib/social';
 import { isLater, loadReads, mergeReads, saveReads, type ReadMap } from '../lib/reads';
 import { HISTORY_WINDOW_MS } from '../lib/requests';
-import type { Chat, ConnectionRequest, Message, PublicProfile, RequestKind } from '../lib/types';
+import { directKey, toggledReaction, withReaction, type ReactionMap } from '../lib/reactions';
+import type { Chat, ConnectionRequest, Message, PublicProfile, Reaction, RequestKind } from '../lib/types';
 
 export interface ChatThread {
   chat: Chat;
@@ -26,6 +27,9 @@ export function useInbox(userId: string | null) {
   const [requests, setRequests] = useState<ConnectionRequest[]>([]);
   const [chats, setChats] = useState<Chat[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [reactions, setReactions] = useState<ReactionMap>({});
+  const reactionsRef = useRef(reactions);
+  reactionsRef.current = reactions;
   const [people, setPeople] = useState<Record<string, PublicProfile>>({});
   const [readAt, setReadAt] = useState<ReadMap>(() => loadReads(READ_KEY));
   const readAtRef = useRef(readAt);
@@ -56,17 +60,23 @@ export function useInbox(userId: string | null) {
   const load = useCallback(async (): Promise<Chat[]> => {
     if (!userId) return [];
     const since = new Date(Date.now() - HISTORY_WINDOW_MS).toISOString(); // the server deletes handled requests after 7 days
-    const [r, c, m, cr] = await Promise.all([
+    const [r, c, m, cr, rx] = await Promise.all([
       supabase.from('connection_requests').select('*').gte('created_at', since).order('created_at', { ascending: false }),
       supabase.from('chats').select('*'),
       supabase.from('messages').select('*').order('created_at', { ascending: true }).limit(2000),
       supabase.from('chat_reads').select('chat_id,last_read_at'), // my own rows only (RLS)
+      supabase.from('message_reactions').select('*').not('message_id', 'is', null).not('emoji', 'is', null), // reactions I am allowed to see
     ]);
     const reqs = (r.data ?? []) as ConnectionRequest[];
     const chs = (c.data ?? []) as Chat[];
     setRequests(reqs);
     setChats(chs);
     setMessages((m.data ?? []) as Message[]);
+    if (!rx.error && rx.data) {
+      let map: ReactionMap = {};
+      for (const x of rx.data as Reaction[]) if (x.message_id) map = withReaction(map, directKey(x.message_id), x.user_id, x.emoji);
+      setReactions(map);
+    }
     if (!cr.error && cr.data) {
       const entries = (cr.data as { chat_id: string; last_read_at: string }[]).map((x): [string, string] => [x.chat_id, x.last_read_at]);
       setReadAt((prev) => mergeReads(prev, entries)); // server wins when later; never moves a chat back to unread
@@ -94,6 +104,11 @@ export function useInbox(userId: string | null) {
     const nameOf = async (id: string) => {
       await loadPeople([id]);
       return peopleRef.current[id]?.first_name ?? 'מישהו';
+    };
+
+    const onReaction = (row: Reaction) => {
+      if (!row.message_id) return; // room reactions are handled by useGroups
+      setReactions((prev) => withReaction(prev, directKey(row.message_id as string), row.user_id, row.emoji));
     };
 
     const channel = supabase
@@ -137,6 +152,8 @@ export function useInbox(userId: string | null) {
           }
         },
       )
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'message_reactions' }, (p) => onReaction(p.new as Reaction))
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'message_reactions' }, (p) => onReaction(p.new as Reaction))
       .subscribe();
 
     return () => {
@@ -215,6 +232,24 @@ export function useInbox(userId: string | null) {
     [partnerOf],
   );
 
+  /** React to a direct message with one of the quick emojis (same emoji again removes it). Optimistic, rolled back on error. */
+  const react = useCallback(
+    async (messageId: string, emoji: string): Promise<Result> => {
+      if (!userId) return { error: 'not signed in' };
+      const key = directKey(messageId);
+      const before = reactionsRef.current[key]?.[userId] ?? null;
+      setReactions((prev) => withReaction(prev, key, userId, toggledReaction(prev, key, userId, emoji)));
+      const { data, error } = await supabase.rpc('react_to_message', { p_message: messageId, p_emoji: emoji });
+      if (error) {
+        setReactions((prev) => withReaction(prev, key, userId, before));
+        return { error: error.message };
+      }
+      setReactions((prev) => withReaction(prev, key, userId, typeof data === 'string' ? data : null)); // the server's answer wins
+      return { error: null };
+    },
+    [userId],
+  );
+
   const sendMessage = useCallback(async (chatId: string, content: string): Promise<Result> => {
     const text = content.trim().slice(0, 1000);
     if (!text) return { error: 'empty' };
@@ -257,7 +292,7 @@ export function useInbox(userId: string | null) {
       .sort((a, b) => (b.last?.created_at ?? b.chat.created_at).localeCompare(a.last?.created_at ?? a.chat.created_at));
   }, [chats, messages, readAt, userId, partnerOf]);
 
-  return { requests, chats, messages, threads, people, sendRequest, respond, block, sendMessage, markRead, reload: load };
+  return { requests, chats, messages, threads, people, reactions, react, sendRequest, respond, block, sendMessage, markRead, reload: load };
 }
 
 export type Inbox = ReturnType<typeof useInbox>;
