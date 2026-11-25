@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, Check, ChevronLeft, Instagram, Linkedin, Loader2, LogOut, MapPin, QrCode, SendHorizontal, UserPlus, Users } from 'lucide-react';
+import { ArrowRight, Check, ChevronLeft, Instagram, Linkedin, Loader2, LogOut, MapPin, MessageCircle, QrCode, SendHorizontal, UserPlus, Users } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
 import { BottomSheet } from '../components/BottomSheet';
 import { AddMembersSheet, type GroupCandidate } from '../components/CreateGroupSheet';
@@ -345,6 +345,15 @@ export function GroupChat({ myId, groupId, groups, candidates, myLinks, onBack }
                   {m.headline && <span dir="auto" className="line-clamp-2 block text-right text-xs leading-snug text-ink/70">{m.headline}</span>}
                 </span>
               </div>
+              {m.current_intent && (
+                <p dir="auto" className="mt-2 flex items-start gap-1.5 rounded-xl bg-bg px-2.5 py-1.5 text-right text-[13px] leading-snug text-ink/80">
+                  <MessageCircle size={13} aria-hidden className="mt-[3px] shrink-0 text-cta" />
+                  <span>
+                    <span className="font-bold text-ink">כרגע: </span>
+                    {m.current_intent}
+                  </span>
+                </p>
+              )}
               <MemberLinks m={m} />
             </li>
           ))}

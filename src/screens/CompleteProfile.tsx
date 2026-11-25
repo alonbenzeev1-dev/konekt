@@ -3,6 +3,7 @@ import { Bell, Loader2, LogOut, MapPin, Check } from 'lucide-react';
 import { Wordmark } from '../components/Logo';
 import { PhotoPicker } from '../components/PhotoPicker';
 import { LinkFields } from '../components/LinkFields';
+import { TypewriterInput } from '../components/TypewriterInput';
 import { supabase } from '../lib/supabase';
 import { normalizeInstagram, normalizeLinkedIn } from '../lib/social';
 import { importLinkedInAvatar, isInvalidLinkError, upsertProfile, uploadAvatar } from '../lib/profile';
@@ -21,6 +22,7 @@ interface Props {
 export function CompleteProfile({ uid, initialName, linkedinPicture, onDone }: Props) {
   const [name, setName] = useState(initialName);
   const [headline, setHeadline] = useState('');
+  const [intent, setIntent] = useState('');
   const [linkedin, setLinkedin] = useState('');
   const [instagram, setInstagram] = useState('');
   const [file, setFile] = useState<File | null>(null);
@@ -57,6 +59,8 @@ export function CompleteProfile({ uid, initialName, linkedinPicture, onDone }: P
       let profile = await upsertProfile(uid, {
         first_name: name.trim().slice(0, 30),
         headline: headline.trim().slice(0, 60) || null,
+        // only sent when filled in, so sign-up still works before the current_intent migration
+        ...(intent.trim() ? { current_intent: intent.trim().slice(0, 60) } : {}),
         linkedin_url: liNorm,
         instagram_handle: igNorm,
         avatar_url: file ? null : linkedinPicture,
@@ -143,6 +147,12 @@ export function CompleteProfile({ uid, initialName, linkedinPicture, onDone }: P
               </span>
               <input className="field" maxLength={60} value={headline} onChange={(e) => setHeadline(e.target.value)} placeholder="למשל: מדעי המחשב, שנה ב׳" />
             </label>
+            <div>
+              <label htmlFor="onboarding-intent" className="mb-1.5 block text-xs font-bold text-ink">
+                מה הקטע שלך כרגע? <span className="font-normal text-muted">(לא חובה)</span>
+              </label>
+              <TypewriterInput id="onboarding-intent" value={intent} onChange={setIntent} />
+            </div>
           </div>
         </section>
 

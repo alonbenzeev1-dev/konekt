@@ -10,6 +10,9 @@ export interface MyProfile {
   instagram_handle: string | null;
   /** Quick campus tags (profiles.tags). Missing until the campus_tags migration is applied. */
   tags?: string[];
+  /** Live status ("מה הקטע שלך כרגע?"). Missing until the current_intent migration is applied. */
+  current_intent?: string | null;
+  current_intent_at?: string | null;
   /** Server-side "saw the walkthrough" flag. Missing until the has_seen_guide migration is applied. */
   has_seen_guide?: boolean;
   is_visible: boolean;
@@ -24,6 +27,8 @@ export interface PublicProfile {
   first_name: string;
   headline: string | null;
   avatar_url: string | null;
+  /** Their live status, only while it is fresh (the server decides). */
+  current_intent?: string | null;
 }
 
 export interface NearbyUser extends PublicProfile {
@@ -79,6 +84,7 @@ export interface GroupMember {
   first_name: string;
   headline: string | null;
   avatar_url: string | null;
+  current_intent?: string | null;
   /** LinkedIn shared in this room. */
   share_socials: boolean;
   /** Instagram shared in this room (older servers: follows share_socials). */

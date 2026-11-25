@@ -29,6 +29,7 @@ import { fetchMyProfile, setVisible } from './lib/profile';
 import { subscribeToPush, toast } from './lib/notify';
 import { msLeft } from './lib/time';
 import { capturePendingJoin, markJoinAuto } from './lib/invite';
+import { activeIntent } from './lib/intent';
 import type { MyProfile } from './lib/types';
 
 type Boot =
@@ -150,6 +151,22 @@ function Main({ profile, onProfile, onSignedOut }: { profile: MyProfile; onProfi
     [profile, onProfile],
   );
 
+  /** Optimistic: the card updates at once, and is rolled back if the server says no. */
+  const saveIntent = useCallback(
+    async (value: string | null): Promise<boolean> => {
+      const prev = profile;
+      onProfile({ ...profile, current_intent: value, current_intent_at: value ? new Date().toISOString() : null });
+      const { error } = await supabase.from('profiles').update({ current_intent: value }).eq('id', profile.id);
+      if (error) {
+        onProfile(prev);
+        toast('לא הצלחנו לשמור את הסטטוס. נסו שוב.', 'error');
+        return false;
+      }
+      return true;
+    },
+    [profile, onProfile],
+  );
+
   const badges = useMemo<Partial<Record<Tab, number>>>(() => {
     const pending = inbox.requests.filter(
       (r) => r.receiver_id === profile.id && r.status === 'pending' && msLeft(r.expires_at, now) > 0,
@@ -195,6 +212,8 @@ function Main({ profile, onProfile, onSignedOut }: { profile: MyProfile; onProfi
             scanned={scanned}
             campusCount={campusCount}
             inbox={inbox}
+            myIntent={activeIntent(profile)}
+            onSaveIntent={saveIntent}
             onOpenChat={setChatId}
           />
         )}

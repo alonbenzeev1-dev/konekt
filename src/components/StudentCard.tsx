@@ -1,3 +1,4 @@
+import { MessageCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Avatar } from './Avatar';
 import { TagChips } from './TagChips';
@@ -26,6 +27,8 @@ interface Props {
   headlineFallback?: string;
   avatarUrl: string | null;
   tags?: string[];
+  /** Their live status ("מה הקטע שלך כרגע?"), when set. */
+  intent?: string | null;
   distanceM: number;
   live?: boolean;
   /** Makes the identity block tappable (the CTA below is separate). */
@@ -37,7 +40,7 @@ interface Props {
  * One student, exactly as others see them in סביבי. The profile preview renders this same component,
  * so "how you look" and "how you look to others" cannot drift apart.
  */
-export function StudentCard({ name, headline, headlineFallback, avatarUrl, tags, distanceM, live, onOpen, cta }: Props) {
+export function StudentCard({ name, headline, headlineFallback, avatarUrl, tags, intent, distanceM, live, onOpen, cta }: Props) {
   const identity = (
     <>
       <Avatar url={avatarUrl} name={name} size={60} live={live} />
@@ -48,6 +51,15 @@ export function StudentCard({ name, headline, headlineFallback, avatarUrl, tags,
         ) : headlineFallback ? (
           <span className="mt-0.5 block text-sm leading-snug text-muted italic">{headlineFallback}</span>
         ) : null}
+        {intent && (
+          <span dir="auto" className="mt-2 flex items-start gap-1.5 rounded-xl bg-bg px-2.5 py-1.5 text-right text-[13px] leading-snug text-ink/80">
+            <MessageCircle size={13} aria-hidden className="mt-[3px] shrink-0 text-cta" />
+            <span>
+              <span className="font-bold text-ink">כרגע: </span>
+              {intent}
+            </span>
+          </span>
+        )}
         <span className="mt-2 flex flex-wrap items-center gap-1.5">
           <DistancePill meters={distanceM} />
         </span>

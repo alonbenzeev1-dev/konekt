@@ -4,6 +4,8 @@ import { PhotoPicker } from '../components/PhotoPicker';
 import { LinkFields } from '../components/LinkFields';
 import { StudentCard, ctaBase } from '../components/StudentCard';
 import { CAMPUS_TAGS, MAX_TAGS } from '../lib/tags';
+import { TypewriterInput } from '../components/TypewriterInput';
+import { activeIntent } from '../lib/intent';
 import { VisibilityToggle } from '../components/VisibilityToggle';
 import { supabase } from '../lib/supabase';
 import { toast } from '../lib/notify';
@@ -22,6 +24,7 @@ interface Props {
 export function Profile({ profile, onProfile, visible, onToggle, onSignedOut }: Props) {
   const [name, setName] = useState(profile.first_name);
   const [headline, setHeadline] = useState(profile.headline ?? '');
+  const [intent, setIntent] = useState(activeIntent(profile) ?? '');
   const [linkedin, setLinkedin] = useState(profile.linkedin_url ?? '');
   const [instagram, setInstagram] = useState(profile.instagram_handle ?? '');
   const [tags, setTags] = useState<string[]>(profile.tags ?? []);
@@ -36,8 +39,10 @@ export function Profile({ profile, onProfile, visible, onToggle, onSignedOut }: 
   const tagsChanged = tagsKey(tags) !== tagsKey(profile.tags ?? []);
   const toggleTag = (t: string) =>
     setTags((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : prev.length < MAX_TAGS ? [...prev, t] : prev));
+  const intentChanged = (intent.trim() || null) !== activeIntent(profile);
   const dirty =
     tagsChanged ||
+    intentChanged ||
     name.trim() !== profile.first_name ||
     (headline.trim() || null) !== profile.headline ||
     liNorm !== profile.linkedin_url ||
@@ -72,6 +77,7 @@ export function Profile({ profile, onProfile, visible, onToggle, onSignedOut }: 
         instagram_handle: igNorm,
         // only sent when edited, so saving still works before the tags migration is applied
         ...(tagsChanged ? { tags } : {}),
+        ...(intentChanged ? { current_intent: intent.trim() || null } : {}),
       });
       onProfile(p);
       toast('נשמר', 'success');
@@ -107,6 +113,7 @@ export function Profile({ profile, onProfile, visible, onToggle, onSignedOut }: 
           headlineFallback="הוסיפו שורת תיאור: תואר, שנה או תחום"
           avatarUrl={profile.avatar_url}
           tags={tags}
+          intent={intent.trim() || null}
           distanceM={25}
           live
           cta={
@@ -154,6 +161,12 @@ export function Profile({ profile, onProfile, visible, onToggle, onSignedOut }: 
           </span>
           <input className="field" value={headline} maxLength={60} onChange={(e) => setHeadline(e.target.value)} placeholder="למשל: הנדסת תעשייה וניהול, שנה ג׳" />
         </label>
+        <div className="mt-4">
+          <label htmlFor="profile-intent" className="mb-1.5 block text-xs font-bold text-ink">
+            מה הקטע שלך כרגע? <span className="font-normal text-muted">(מופיע בכרטיס שלך ל-8 שעות)</span>
+          </label>
+          <TypewriterInput id="profile-intent" value={intent} onChange={setIntent} />
+        </div>
         <div className="mt-4">
           <span className="mb-1.5 flex items-center justify-between text-xs font-bold text-ink">
             <span>תגיות <span className="font-normal text-muted">(מופיעות בכרטיס שלך, עד {MAX_TAGS})</span></span>

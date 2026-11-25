@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight, Ban, Hourglass, SendHorizontal } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
 import { useNow } from '../hooks/useNow';
+import { intentIcebreaker } from '../lib/intent';
 import { toast } from '../lib/notify';
 import { formatClock, formatHoursLeft, msLeft } from '../lib/time';
 import type { Inbox } from '../hooks/useInbox';
@@ -20,6 +21,7 @@ export function Chat({ myId, chatId, inbox, onBack }: Props) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const thread = inbox.threads.find((t) => t.chat.id === chatId);
   const open = !!thread && msLeft(thread.chat.expires_at, now) > 0;
@@ -27,6 +29,11 @@ export function Chat({ myId, chatId, inbox, onBack }: Props) {
   const name = partner?.first_name ?? '…';
 
   const msgs = useMemo(() => inbox.messages.filter((m) => m.chat_id === chatId), [inbox.messages, chatId]);
+
+  // what they wrote as their status: a natural first line, offered until I have said something myself
+  const partnerIntent = partner?.current_intent?.trim() || null;
+  const iHaveWritten = msgs.some((m) => m.sender_id === myId);
+  const intentChip = open && partnerIntent && !iHaveWritten ? intentIcebreaker(partnerIntent) : null;
 
   const { markRead } = inbox;
   useEffect(() => {
@@ -116,8 +123,24 @@ export function Chat({ myId, chatId, inbox, onBack }: Props) {
         <div ref={endRef} />
       </main>
 
-      {open && msgs.length === 0 && (
+      {intentChip && (
         <div className="border-t border-line bg-card px-3 pt-2.5">
+          <p className="mb-1.5 text-[11px] font-bold text-muted">מבוסס על מה ש{name} כתב/ה</p>
+          <button
+            type="button"
+            onClick={() => {
+              setText(intentChip);
+              inputRef.current?.focus();
+            }}
+            className="w-full rounded-xl border border-primary/30 bg-primary-soft px-3 py-2 text-start text-[13px] leading-snug font-semibold text-cta-press transition-transform active:scale-[0.99]"
+          >
+            {intentChip}
+          </button>
+        </div>
+      )}
+
+      {open && msgs.length === 0 && (
+        <div className={`bg-card px-3 pt-2.5 ${intentChip ? '' : 'border-t border-line'}`}>
           <p className="mb-1.5 text-[11px] font-bold text-muted">פתיחה בקליק אחד</p>
           <div className="flex flex-wrap gap-1.5">
             {ICEBREAKERS.map((m) => (
@@ -140,9 +163,10 @@ export function Chat({ myId, chatId, inbox, onBack }: Props) {
           e.preventDefault();
           void send();
         }}
-        className={`flex items-end gap-2 bg-card px-3 pt-2.5 safe-bottom ${open && msgs.length === 0 ? '' : 'border-t border-line'}`}
+        className={`flex items-end gap-2 bg-card px-3 pt-2.5 safe-bottom ${open && (msgs.length === 0 || intentChip) ? '' : 'border-t border-line'}`}
       >
         <textarea
+          ref={inputRef}
           rows={1}
           value={text}
           maxLength={1000}

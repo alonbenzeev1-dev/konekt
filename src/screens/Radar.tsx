@@ -3,11 +3,13 @@ import { ArrowUpLeft, Check, Clock, EyeOff, Instagram, Linkedin, Loader2, MapPin
 import { Avatar } from '../components/Avatar';
 import { TagChips } from '../components/TagChips';
 import { NearbySkeleton } from '../components/Skeleton';
+import { IntentBar } from '../components/IntentBar';
 import { StudentCard, ctaBase } from '../components/StudentCard';
 import { BottomSheet } from '../components/BottomSheet';
 import { useConnectionLink } from '../hooks/useConnectionLink';
 import { FEW_PEOPLE, RADIUS_M } from '../hooks/useNearby';
 import { toast } from '../lib/notify';
+import { intentIcebreaker } from '../lib/intent';
 import { findRequest, requestFailureText } from '../lib/requests';
 import { inviteNearby, kindLabel } from '../lib/social';
 import type { GeoStatus } from '../hooks/usePresence';
@@ -24,10 +26,13 @@ interface Props {
   scanned: boolean;
   campusCount: number | null;
   inbox: Inbox;
+  /** My own live status (null = none / expired) and how to change it. */
+  myIntent: string | null;
+  onSaveIntent: (value: string | null) => Promise<boolean>;
   onOpenChat: (chatId: string) => void;
 }
 
-export function Radar({ myId, visible, onShow, geo, users, scanned, campusCount, inbox, onOpenChat }: Props) {
+export function Radar({ myId, visible, onShow, geo, users, scanned, campusCount, inbox, myIntent, onSaveIntent, onOpenChat }: Props) {
   const [selected, setSelected] = useState<NearbyUser | null>(null);
   const live = visible && geo === 'ok';
   const locating = visible && (geo === 'idle' || geo === 'locating');
@@ -35,6 +40,7 @@ export function Radar({ myId, visible, onShow, geo, users, scanned, campusCount,
   return (
     <div className="px-4 pb-6">
       <LiveStatusCard live={live} locating={locating} scanned={scanned} nearby={users.length} campusCount={campusCount} />
+      {visible && <IntentBar saved={myIntent} onSave={onSaveIntent} />}
 
       {!visible ? (
         <StateCard
@@ -172,6 +178,7 @@ function NearbyCard({ user, myId, inbox, onOpen }: { user: NearbyUser; myId: str
       headline={user.headline}
       avatarUrl={user.avatar_url}
       tags={user.tags}
+      intent={user.current_intent}
       distanceM={user.distance_m}
       live
       onOpen={onOpen}
@@ -340,6 +347,12 @@ function PersonSheet({
         <Avatar url={user.avatar_url} name={user.first_name} size={92} ring live />
         <h3 className="mt-3 text-2xl font-extrabold text-ink">{user.first_name}</h3>
         {user.headline && <p className="mt-0.5 max-w-[300px] text-sm text-muted">{user.headline}</p>}
+        {user.current_intent && (
+          <p dir="auto" className="mt-2 max-w-[300px] rounded-xl bg-bg px-3 py-1.5 text-[13px] leading-snug text-ink/80">
+            <span className="font-bold text-ink">כרגע: </span>
+            {user.current_intent}
+          </p>
+        )}
         <TagChips tags={user.tags} className="mt-2 justify-center" />
         <p className="mt-1 text-xs font-bold text-primary">~{user.distance_m} מטר ממך</p>
       </div>
@@ -356,6 +369,15 @@ function PersonSheet({
           </div>
         ) : composing ? (
           <div className="space-y-2">
+            {user.current_intent && (
+              <button
+                type="button"
+                onClick={() => setFirst(intentIcebreaker(user.current_intent as string))}
+                className="w-full rounded-xl border border-primary/30 bg-primary-soft px-3 py-2 text-start text-[13px] leading-snug font-semibold text-cta-press active:scale-[0.99]"
+              >
+                {intentIcebreaker(user.current_intent)}
+              </button>
+            )}
             <textarea
               autoFocus
               rows={2}

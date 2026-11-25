@@ -16,6 +16,7 @@ Commands: `npm run dev`, `npm run build` (`tsc -b && vite build`; must be clean 
 - `supabase/migrations/read_state.sql` server-side read state: group_members.last_read_at, chat_reads, mark_chat_read / mark_group_read
 - `supabase/migrations/mutual_approval.sql` respond_request(request_id, accept, share_back)
 - `supabase/migrations/rooms_invites.sql` groups become rooms: description + place, invite_code (QR / ?join=<code>), 200 members, LinkedIn cards (share_linkedin_in_group), separate share_instagram
+- `supabase/migrations/current_intent.sql` profiles.current_intent (+ current_intent_at set by a trigger); get_nearby_users / get_group_members / get_public_profiles return it while fresh (8 h)
 - `supabase/migrations/campus_tags.sql` profiles.tags (max 3) + get_nearby_users returning tags
 - `supabase/functions/` import-avatar, push
 
@@ -27,6 +28,9 @@ Commands: `npm run dev`, `npm run build` (`tsc -b && vite build`; must be clean 
 - To get the other person's link back, the receiver must send their own request ("בקש גם ... חזרה" on the Inbox link card).
 - The client loads only the last 48 h of requests, so approved links older than that disappear from the UI.
 - Blocks are mutual, permanent and silent.
+
+## Live status ("מה הקטע שלך כרגע?")
+- Max 60 chars, shown on nearby cards, in room member lists and as a one-tap opener (fills the message box, never sends). It expires 8 h after it was set: the 8 h lives in current_intent.sql and in INTENT_TTL_MS (src/lib/intent.ts). Edit it with <TypewriterInput> (typewriter placeholder; respects reduced motion).
 
 ## Rooms and invites
 - Invite URL is `https://konekt-nu.vercel.app/?join=<code>` (fixed origin). `capturePendingJoin()` (src/lib/invite.ts) stores the code in localStorage on first load and strips it from the URL, so it survives the LinkedIn redirect and onboarding. A brand-new member who arrived through an invite auto-joins; anyone else gets a one-tap "join this room?" card (`JoinInvite`).
