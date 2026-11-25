@@ -56,7 +56,7 @@ self.addEventListener('push', (event) => {
       tag: data.tag || 'konekt',
       renotify: true,
       vibrate: [80, 40, 80],
-      data: { url: data.url || '/?tab=inbox' },
+      data: { url: data.url || '/?tab=chats' },
     }),
   );
 });

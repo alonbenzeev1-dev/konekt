@@ -8,7 +8,7 @@ Commands: `npm run dev`, `npm run build` (`tsc -b && vite build`; must be clean 
 
 ## Layout
 - `src/App.tsx` boot/auth flow and tab shell
-- `src/screens/` Radar (nearby + person sheet), Inbox (requests, approved links, chats), Chat, Profile, CompleteProfile, Welcome
+- `src/screens/` Radar (nearby + person sheet), ChatsScreen (1-on-1 + groups), RequestsScreen (incoming, approved links, sent), Chat, GroupChat, Profile, CompleteProfile, Welcome
 - `src/hooks/` useInbox (requests/chats/messages + Realtime), useNearby, usePresence, useConnectionLink
 - `src/lib/` supabase client, types, social helpers, profile helpers
 - `supabase_schema.sql` full schema, RLS and RPCs (paste into SQL Editor; safe to re-run)

@@ -40,13 +40,13 @@ Deno.serve(async (req) => {
   if (body.table === 'messages' && body.type === 'INSERT') {
     to = r.receiver_id;
     fromId = r.sender_id;
-    payload = { title: 'הודעה חדשה', body: r.content.slice(0, 80), tag: `msg-${r.chat_id}`, url: '/?tab=inbox' };
+    payload = { title: 'הודעה חדשה', body: r.content.slice(0, 80), tag: `msg-${r.chat_id}`, url: '/?tab=chats' };
   } else if (body.table === 'connection_requests' && body.type === 'INSERT') {
     to = r.receiver_id;
     fromId = r.sender_id;
     // Chat requests: don't put the (not yet approved) first message on the lock screen.
     const what = r.kind === 'chat' ? 'רוצה להתחיל איתך צ׳אט' : `מבקש/ת את ה-${label} שלך`;
-    payload = { title: 'בקשה חדשה', body: `${what} · שעתיים לאשר`, tag: `req-${r.id}`, url: '/?tab=inbox' };
+    payload = { title: 'בקשה חדשה', body: `${what} · שעתיים לאשר`, tag: `req-${r.id}`, url: '/?tab=requests' };
   } else if (body.table === 'connection_requests' && body.type === 'UPDATE' && r.status === 'accepted' && body.old_record?.status === 'pending') {
     to = r.sender_id;
     fromId = r.receiver_id;
@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
       title: 'הבקשה אושרה!',
       body: r.kind === 'chat' ? 'הצ׳אט פתוח ל-24 שעות' : `ה-${label} נחשף — פתחו את KONEKT`,
       tag: `acc-${r.id}`,
-      url: '/?tab=inbox',
+      url: r.kind === 'chat' ? '/?tab=chats' : '/?tab=requests',
     };
   }
   if (!to || !payload) return new Response('ignored');

@@ -7,7 +7,8 @@ import { Toaster } from './components/Toaster';
 import { Welcome } from './screens/Welcome';
 import { CompleteProfile } from './screens/CompleteProfile';
 import { Radar } from './screens/Radar';
-import { Inbox } from './screens/Inbox';
+import { ChatsScreen } from './screens/ChatsScreen';
+import { RequestsScreen } from './screens/RequestsScreen';
 import { Chat } from './screens/Chat';
 import { GroupChat } from './screens/GroupChat';
 import { Profile } from './screens/Profile';
@@ -103,7 +104,8 @@ function ConfiguredApp() {
 
 function initialTab(): Tab {
   const t = new URLSearchParams(location.search).get('tab');
-  return t === 'inbox' || t === 'profile' ? t : 'radar';
+  if (t === 'chats' || t === 'requests' || t === 'profile') return t;
+  return t === 'inbox' ? 'requests' : 'radar'; // 'inbox' = old notification links
 }
 
 function Main({ profile, onProfile, onSignedOut }: { profile: MyProfile; onProfile: (p: MyProfile) => void; onSignedOut: () => void }) {
@@ -139,15 +141,15 @@ function Main({ profile, onProfile, onSignedOut }: { profile: MyProfile; onProfi
     [profile, onProfile],
   );
 
-  const badge = useMemo(() => {
+  const badges = useMemo<Partial<Record<Tab, number>>>(() => {
     const pending = inbox.requests.filter(
       (r) => r.receiver_id === profile.id && r.status === 'pending' && msLeft(r.expires_at, now) > 0,
     ).length;
-    const unread = inbox.threads.filter((t) => t.unread > 0).length;
-    return pending + unread;
+    const unread = inbox.threads.filter((t) => t.unread > 0 && msLeft(t.chat.expires_at, now) > 0).length;
+    return { requests: pending, chats: unread };
   }, [inbox.requests, inbox.threads, profile.id, now]);
 
-  const titles: Record<Tab, string> = { radar: '', inbox: 'בקשות וצ׳אט', profile: 'הפרופיל שלי' };
+  const titles: Record<Tab, string> = { radar: '', chats: 'צ׳אטים', requests: 'בקשות', profile: 'הפרופיל שלי' };
 
   return (
     <>
@@ -172,13 +174,16 @@ function Main({ profile, onProfile, onSignedOut }: { profile: MyProfile; onProfi
             onOpenChat={setChatId}
           />
         )}
-        {tab === 'inbox' && <Inbox myId={profile.id} inbox={inbox} groups={groups} candidates={candidates} onOpenChat={setChatId} onOpenGroup={setGroupId} />}
+        {tab === 'chats' && (
+          <ChatsScreen myId={profile.id} inbox={inbox} groups={groups} candidates={candidates} onOpenChat={setChatId} onOpenGroup={setGroupId} />
+        )}
+        {tab === 'requests' && <RequestsScreen myId={profile.id} inbox={inbox} onOpenChat={setChatId} />}
         {tab === 'profile' && (
           <Profile profile={profile} onProfile={onProfile} visible={visible} onToggle={toggle} onSignedOut={onSignedOut} />
         )}
       </main>
 
-      <TabBar tab={tab} onTab={setTab} badge={badge} />
+      <TabBar tab={tab} onTab={setTab} badges={badges} />
 
       {chatId && <Chat myId={profile.id} chatId={chatId} inbox={inbox} onBack={() => setChatId(null)} />}
       {groupId && <GroupChat myId={profile.id} groupId={groupId} groups={groups} candidates={candidates} onBack={() => setGroupId(null)} />}
