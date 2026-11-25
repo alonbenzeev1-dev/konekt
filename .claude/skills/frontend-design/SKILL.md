@@ -39,7 +39,7 @@ Rules: use the Tailwind tokens (`bg-bg`, `bg-card`, `text-ink`, `text-muted`, `b
 ## 3. Surfaces and depth
 
 - Cards: `rounded-2xl` (inner elements `rounded-xl`), 1px `border-line`, soft shadow (`--shadow-card`). Depth comes from border + a faint, wide, low-opacity shadow. Not from heavy drop shadows.
-- **No decorative gradients.** Gradients are allowed for the Instagram brand button and the logo only. No glassmorphism stacks, no neon glows, no gradient text, no emoji as icons in UI chrome (they are fine inside user content and a few friendly empty states).
+- **No decorative gradients.** Gradients are allowed for the Instagram brand button, the logo, and the soft per-person avatar tint (`avatarTint` in `src/lib/avatar.ts`: curated hues, dark text of the same hue). No glassmorphism stacks, no neon glows, no gradient text, no emoji as icons in UI chrome (they are fine inside user content and a few friendly empty states).
 - Sticky bars (header, tab bar): `bg-card/90 backdrop-blur-xl` + hairline border. Nothing else floats.
 - Sheets: `BottomSheet` with grab handle, `rounded-t-3xl`, content scrolls, max 92vh.
 - Icons: lucide, 16-22px, stroke 1.8-2.3, `currentColor`. One icon style across the app.

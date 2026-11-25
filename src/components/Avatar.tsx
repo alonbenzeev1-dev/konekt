@@ -1,3 +1,5 @@
+import { avatarTint, initialOf } from '../lib/avatar';
+
 interface Props {
   url: string | null;
   name: string;
@@ -8,18 +10,20 @@ interface Props {
 
 export function Avatar({ url, name, size = 56, ring = false, live = false }: Props) {
   const dot = Math.max(10, Math.round(size * 0.24));
+  const tint = avatarTint(name);
   return (
     <span className="relative inline-block shrink-0" style={{ width: size, height: size }}>
       <span
-        className={`block h-full w-full overflow-hidden rounded-full bg-primary-soft shadow-sm ${
-          ring ? 'ring-2 ring-primary ring-offset-2 ring-offset-card' : 'ring-1 ring-line'
+        className={`block h-full w-full overflow-hidden rounded-full shadow-sm ${
+          ring ? 'ring-2 ring-primary ring-offset-2 ring-offset-card' : 'ring-1 ring-black/5'
         }`}
+        style={url ? undefined : { background: tint.background }}
       >
         {url ? (
           <img src={url} alt={name} className="h-full w-full object-cover" loading="lazy" draggable={false} referrerPolicy="no-referrer" />
         ) : (
-          <span className="flex h-full w-full items-center justify-center font-extrabold text-cta-press" style={{ fontSize: size * 0.38 }}>
-            {name.slice(0, 1)}
+          <span className="flex h-full w-full items-center justify-center font-extrabold" style={{ fontSize: size * 0.4, color: tint.color }}>
+            {initialOf(name)}
           </span>
         )}
       </span>

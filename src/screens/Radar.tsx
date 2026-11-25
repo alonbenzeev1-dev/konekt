@@ -1,11 +1,12 @@
 import { useState, type ReactNode } from 'react';
-import { ArrowUpLeft, Check, Clock, EyeOff, Instagram, Linkedin, Loader2, MapPinOff, MessageCircle, Send, UserPlus, Users, ChevronLeft } from 'lucide-react';
+import { ArrowUpLeft, Check, Clock, EyeOff, Instagram, Linkedin, Loader2, MapPinOff, MessageCircle, Send, Share2, UserPlus } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
 import { TagChips } from '../components/TagChips';
 import { NearbySkeleton } from '../components/Skeleton';
+import { StudentCard, ctaBase } from '../components/StudentCard';
 import { BottomSheet } from '../components/BottomSheet';
 import { useConnectionLink } from '../hooks/useConnectionLink';
-import { CAMPUS_RADIUS_M, FEW_PEOPLE, RADIUS_M } from '../hooks/useNearby';
+import { FEW_PEOPLE, RADIUS_M } from '../hooks/useNearby';
 import { toast } from '../lib/notify';
 import { inviteNearby, kindLabel } from '../lib/social';
 import type { GeoStatus } from '../hooks/usePresence';
@@ -25,8 +26,24 @@ interface Props {
   onOpenChat: (chatId: string) => void;
 }
 
-/** Friendly proximity instead of a raw distance (indoor GPS is too fuzzy for exact meters). */
-const proximityLabel = (m: number) => (m <= 30 ? 'ממש לידך' : 'באזור שלך');
+/** My live (accepted, or pending and not yet expired) request of this kind to that person. */
+function findRequest(requests: ConnectionRequest[], myId: string, userId: string, kind: RequestKind, now: number) {
+  return (
+    requests.find(
+      (x) =>
+        x.sender_id === myId && x.receiver_id === userId && x.kind === kind &&
+        (x.status === 'accepted' || (x.status === 'pending' && Date.parse(x.expires_at) > now)),
+    ) ?? null
+  );
+}
+
+/** Say WHY a request could not be sent. */
+function requestFailureText(error: string, name: string, kind: RequestKind) {
+  if (error.includes('chat already open')) return 'כבר יש ביניכם צ׳אט פתוח';
+  if (/no (linkedin|instagram)/.test(error)) return `${name} עדיין לא הוסיף/ה ${kindLabel[kind]}`;
+  if (error.includes('user unavailable')) return `${name} כבר לא זמין/ה`;
+  return 'לא הצלחנו לשלוח את הבקשה';
+}
 
 export function Radar({ myId, visible, onShow, geo, users, scanned, campusCount, inbox, onOpenChat }: Props) {
   const [selected, setSelected] = useState<NearbyUser | null>(null);
@@ -35,33 +52,7 @@ export function Radar({ myId, visible, onShow, geo, users, scanned, campusCount,
 
   return (
     <div className="px-4 pb-6">
-      <div
-        className={`mt-1 mb-4 flex items-center gap-2.5 rounded-2xl border px-4 py-3 ${
-          live ? 'border-live/30 bg-live-soft/60' : 'border-line bg-card'
-        }`}
-      >
-        <span className="relative flex h-2.5 w-2.5 shrink-0">
-          {live && <span className="absolute inset-0 rounded-full bg-live anim-ping" />}
-          <span className={`relative h-2.5 w-2.5 rounded-full ${live ? 'bg-live' : 'bg-muted/50'}`} />
-        </span>
-        <span className="min-w-0 flex-1 text-sm font-bold text-ink">
-          {live ? (
-            scanned ? (
-              <>פעיל בסביבה · רדיוס <span dir="ltr" className="tabular-nums">{RADIUS_M} מ׳</span></>
-            ) : (
-              'סורקים את הסביבה…'
-            )
-          ) : locating ? (
-            'מאתרים מיקום…'
-          ) : (
-            'לא פעיל כרגע'
-          )}
-        </span>
-        {live && users.length > 0 && (
-          <span className="rounded-full bg-card px-2.5 py-0.5 text-xs font-bold text-live shadow-sm">{users.length} לידך</span>
-        )}
-      </div>
-      {live && <p className="-mt-2 mb-3 px-1 text-center text-[11px] text-muted">השאר מיקום פעיל כדי שחברים בקמפוס יראו אותך</p>}
+      <LiveStatusCard live={live} locating={locating} scanned={scanned} nearby={users.length} campusCount={campusCount} />
 
       {!visible ? (
         <StateCard
@@ -83,41 +74,26 @@ export function Radar({ myId, visible, onShow, geo, users, scanned, campusCount,
       ) : (
         <>
           {users.length > 0 && (
-            <ul className="space-y-2.5">
-              {users.map((u, i) => (
-                <li key={u.id} className="anim-card" style={{ animationDelay: `${Math.min(i, 8) * 35}ms` }}>
-                  <button
-                    onClick={() => setSelected(u)}
-                    className="card flex min-h-[92px] w-full items-center gap-3 rounded-2xl p-3.5 text-start transition-transform active:scale-[0.985]"
-                  >
-                    <Avatar url={u.avatar_url} name={u.first_name} size={56} live />
-                    <span className="min-w-0 flex-1">
-                      <span dir="auto" className="block truncate text-[17px] leading-snug font-bold text-ink">{u.first_name}</span>
-                      {u.headline && <span dir="auto" className="block truncate text-sm text-muted">{u.headline}</span>}
-                      <span className="mt-1.5 inline-flex max-w-full items-center gap-1.5 rounded-full bg-primary-soft px-2.5 py-1 text-[11px] leading-none font-bold whitespace-nowrap text-cta-press">
-                        <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-                        {proximityLabel(u.distance_m)}
-                        <span aria-hidden className="opacity-40">·</span>
-                        <span dir="ltr" className="tabular-nums">~{u.distance_m} מ׳</span>
-                      </span>
-                      <TagChips tags={u.tags} className="mt-1.5" />
-                    </span>
-                    <span className="flex min-h-[36px] shrink-0 items-center gap-0.5 rounded-full bg-cta ps-3 pe-2 text-[13px] font-bold text-white">
-                      התחבר
-                      <ChevronLeft size={16} />
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <>
+              <ul className="space-y-3">
+                {users.map((u, i) => (
+                  <li key={u.id} className="anim-card" style={{ animationDelay: `${Math.min(i, 8) * 35}ms` }}>
+                    <NearbyCard user={u} myId={myId} inbox={inbox} onOpen={() => setSelected(u)} />
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-4 px-3 text-center text-[11px] leading-relaxed text-muted">
+                הקישורים נחשפים רק באישור. אם מי שאישר בוחר להחליף, גם הקישור שלך ייחשף אליו.
+              </p>
+            </>
           )}
           {users.length === 0 && <EmptyRadar campusCount={campusCount} />}
           {users.length > 0 && users.length < FEW_PEOPLE && (
             <button
               onClick={() => void inviteNearby(toast)}
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-primary/20 bg-primary-soft/60 py-3 text-sm font-bold text-primary transition-transform active:scale-[0.98]"
+              className="mt-3 flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl border border-primary/20 bg-primary-soft/60 text-sm font-bold text-cta-press transition-transform active:scale-[0.98]"
             >
-              <UserPlus size={16} /> הזמן את מי שלידך
+              <Share2 size={16} /> הזמן חברים לידך
             </button>
           )}
         </>
@@ -141,26 +117,188 @@ export function Radar({ myId, visible, onShow, geo, users, scanned, campusCount,
   );
 }
 
-/** Nobody within 75m: explain why and make inviting one tap. */
+/** The radar header: is this phone discoverable right now, how many people are around, one tap to invite. */
+function LiveStatusCard({
+  live,
+  locating,
+  scanned,
+  nearby,
+  campusCount,
+}: {
+  live: boolean;
+  locating: boolean;
+  scanned: boolean;
+  nearby: number;
+  campusCount: number | null;
+}) {
+  const num = (n: number) => <span dir="ltr" className="tabular-nums">{n}</span>;
+  const title = live ? (
+    scanned ? <>פעיל בסביבה · {num(RADIUS_M)} מ׳</> : 'סורקים את הסביבה…'
+  ) : locating ? (
+    'מאתרים מיקום…'
+  ) : (
+    'לא פעיל כרגע'
+  );
+  return (
+    <section aria-live="polite" className="card card-elevated mt-1 mb-4 rounded-2xl p-4">
+      <div className="flex items-center gap-3">
+        <span className="relative flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+          {live && <span className="absolute -inset-1.5 rounded-full bg-live/30 anim-ping" />}
+          <span className={`relative h-3.5 w-3.5 rounded-full ${live ? 'bg-live shadow-[0_0_0_4px_rgb(16_185_129/0.18)]' : 'bg-muted/40'}`} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-base leading-tight font-extrabold text-ink">{title}</p>
+          <p className="mt-0.5 text-[13px] leading-snug text-muted">
+            {live && scanned ? (
+              <>
+                <span className="whitespace-nowrap">{nearby > 0 ? <>{num(nearby)} לידך</> : 'אף אחד לא לידך כרגע'}</span>
+                {campusCount != null && campusCount > 0 && (
+                  <>
+                    {' · '}
+                    <span className="whitespace-nowrap">{num(campusCount)} פעילים בקמפוס</span>
+                  </>
+                )}
+              </>
+            ) : live || locating ? (
+              'רגע, מחפשים סטודנטים קרובים'
+            ) : (
+              'הדליקו ״גלוי בסביבה״ כדי לראות ולהיראות'
+            )}
+          </p>
+        </div>
+        {live && (
+          <button
+            onClick={() => void inviteNearby(toast)}
+            aria-label="הזמנת חבר שיושב לידך"
+            className="flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-xl border border-primary/25 bg-primary-soft px-3 text-sm font-bold text-cta-press transition-transform active:scale-[0.97]"
+          >
+            <Share2 size={16} />
+            הזמן
+          </button>
+        )}
+      </div>
+      {live && <p className="mt-3 border-t border-line pt-2.5 text-[11px] text-muted">השאר מיקום פעיל כדי שחברים בקמפוס יראו אותך</p>}
+    </section>
+  );
+}
+
+/** A student in the feed: identity (tap for details) + one clear action. */
+function NearbyCard({ user, myId, inbox, onOpen }: { user: NearbyUser; myId: string; inbox: Inbox; onOpen: () => void }) {
+  return (
+    <StudentCard
+      name={user.first_name}
+      headline={user.headline}
+      avatarUrl={user.avatar_url}
+      tags={user.tags}
+      distanceM={user.distance_m}
+      live
+      onOpen={onOpen}
+      cta={<ConnectCta user={user} myId={myId} inbox={inbox} onOpen={onOpen} />}
+    />
+  );
+}
+
+/** LinkedIn when they have one (one tap sends the request, then it becomes the profile link); otherwise opens the sheet. */
+function ConnectCta({ user, myId, inbox, onOpen }: { user: NearbyUser; myId: string; inbox: Inbox; onOpen: () => void }) {
+  const [sending, setSending] = useState(false);
+  const li = user.has_linkedin ? findRequest(inbox.requests, myId, user.id, 'linkedin', Date.now()) : null;
+  const { link, state, retry } = useConnectionLink(li && li.status === 'accepted' ? li.id : null);
+
+  const send = async () => {
+    setSending(true);
+    const { error } = await inbox.sendRequest(user.id, 'linkedin');
+    setSending(false);
+    if (error) return toast(requestFailureText(error, user.first_name, 'linkedin'), 'error');
+    try { navigator.vibrate?.(30); } catch { /* noop */ }
+    toast(`בקשת LinkedIn נשלחה ל${user.first_name}`, 'success');
+  };
+
+  if (li?.status === 'accepted') {
+    if (link) {
+      return (
+        <a
+          href={link}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`פתיחת הפרופיל של ${user.first_name} ב-LinkedIn`}
+          className={`${ctaBase} bg-[#0A66C2] text-white active:scale-[0.98]`}
+        >
+          <Linkedin size={17} />
+          פתח ב-LinkedIn
+          <ArrowUpLeft size={15} />
+        </a>
+      );
+    }
+    if (state === 'error') {
+      return (
+        <button onClick={retry} className={`${ctaBase} border border-line bg-card text-ink`}>
+          הקישור לא נטען · נסו שוב
+        </button>
+      );
+    }
+    return (
+      <div className={`${ctaBase} bg-bg text-muted`}>
+        {state === 'unavailable' ? 'הקישור כבר לא זמין' : <Loader2 size={17} className="animate-spin" />}
+      </div>
+    );
+  }
+  if (li) {
+    return (
+      <div className={`${ctaBase} border border-line bg-bg text-muted`}>
+        <Clock size={16} /> בקשת LinkedIn נשלחה · ממתין
+      </div>
+    );
+  }
+  if (user.has_linkedin) {
+    return (
+      <button onClick={send} disabled={sending} className={`${ctaBase} bg-[#0A66C2] text-white active:scale-[0.98] disabled:opacity-60`}>
+        {sending ? <Loader2 size={17} className="animate-spin" /> : <Linkedin size={17} />}
+        התחבר ב-LinkedIn
+      </button>
+    );
+  }
+  return (
+    <button onClick={onOpen} className={`${ctaBase} bg-cta text-white active:scale-[0.98]`}>
+      <UserPlus size={17} />
+      בקש חיבור
+    </button>
+  );
+}
+
+/** Quiet radar rings with a pulse and three empty seats: this is where people will show up. */
+function RadarRings() {
+  return (
+    <svg viewBox="0 0 160 160" className="mx-auto h-40 w-40" aria-hidden focusable="false">
+      <circle cx="80" cy="80" r="70" fill="none" stroke="#00AEEF" strokeOpacity=".10" strokeWidth="1.5" />
+      <circle cx="80" cy="80" r="50" fill="none" stroke="#00AEEF" strokeOpacity=".18" strokeWidth="1.5" />
+      <circle cx="80" cy="80" r="30" fill="none" stroke="#00AEEF" strokeOpacity=".30" strokeWidth="1.5" />
+      <circle cx="80" cy="80" r="62" fill="none" stroke="#00AEEF" strokeWidth="2" className="anim-ping" style={{ transformBox: 'fill-box', transformOrigin: 'center' }} />
+      <circle cx="118" cy="50" r="9" fill="#fff" stroke="#00AEEF" strokeOpacity=".55" strokeWidth="1.5" strokeDasharray="3 3" />
+      <circle cx="42" cy="104" r="8" fill="#fff" stroke="#00AEEF" strokeOpacity=".45" strokeWidth="1.5" strokeDasharray="3 3" />
+      <circle cx="116" cy="112" r="7" fill="#fff" stroke="#00AEEF" strokeOpacity=".35" strokeWidth="1.5" strokeDasharray="3 3" />
+      <circle cx="80" cy="80" r="10" fill="#0284C7" />
+      <circle cx="80" cy="80" r="4" fill="#fff" />
+    </svg>
+  );
+}
+
+/** Nobody within 75m: set the scene, then make inviting one tap (native share sheet on a phone). */
 function EmptyRadar({ campusCount }: { campusCount: number | null }) {
   return (
-    <div className="card rounded-3xl p-5 text-center anim-card">
-      <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-live-soft text-live">
-        <Users size={22} />
-      </div>
-      <h3 className="text-base font-bold text-ink">אף אחד לידך עוד לא פתח את KONEKT</h3>
-      <p className="mt-1.5 text-sm leading-relaxed text-muted">
-        {campusCount != null && campusCount > 0
-          ? `${campusCount} פעילים עכשיו בקמפוס, ברדיוס ${CAMPUS_RADIUS_M / 1000} ק״מ ממך. `
-          : ''}
-        הסביבה מתמלאת כשחברים פותחים את האפליקציה. תזמינו את מי שיושב לידכם ותתחברו.
+    <div className="card card-elevated rounded-3xl px-5 pt-6 pb-5 text-center anim-card">
+      <RadarRings />
+      <h3 className="mt-1 text-xl font-extrabold text-ink">אף אחד לא לידך. עדיין.</h3>
+      <p className="mx-auto mt-1.5 max-w-[290px] text-sm leading-relaxed text-ink/70">
+        היו הראשונים בסביבה. הזמינו את מי שיושב לידכם, ותראו זה את זה כאן ברגע שיצטרף.
       </p>
-      <button
-        onClick={() => void inviteNearby(toast)}
-        className="btn-primary mt-4 flex w-full items-center justify-center gap-2 py-3 text-[15px]"
-      >
-        <UserPlus size={18} />
-        הזמן את מי שלידך
+      {campusCount != null && campusCount > 0 && (
+        <p className="mt-2 text-xs text-muted">
+          בינתיים, <span dir="ltr" className="font-bold tabular-nums text-ink">{campusCount}</span> פעילים בקמפוס, קצת יותר רחוק.
+        </p>
+      )}
+      <button onClick={() => void inviteNearby(toast)} className="btn-primary mt-5 flex w-full items-center justify-center gap-2 py-3.5 text-base">
+        <Share2 size={18} />
+        הזמן חברים לידך
       </button>
     </div>
   );
@@ -184,12 +322,7 @@ function PersonSheet({
   const [first, setFirst] = useState('');
   const now = Date.now();
 
-  const requestFor = (k: RequestKind) =>
-    inbox.requests.find(
-      (x) =>
-        x.sender_id === myId && x.receiver_id === user.id && x.kind === k &&
-        (x.status === 'accepted' || (x.status === 'pending' && new Date(x.expires_at).getTime() > now)),
-    ) ?? null;
+  const requestFor = (k: RequestKind) => findRequest(inbox.requests, myId, user.id, k, now);
 
   const openChat = inbox.threads.find((t) => t.partnerId === user.id && new Date(t.chat.expires_at).getTime() > now);
   const chatStatus = requestFor('chat')?.status ?? null;
@@ -199,16 +332,7 @@ function PersonSheet({
     const { error } = await inbox.sendRequest(user.id, k, k === 'chat' ? first : undefined);
     setSending(null);
     if (error) {
-      toast(
-        error.includes('chat already open')
-          ? 'כבר יש ביניכם צ׳אט פתוח'
-          : /no (linkedin|instagram)/.test(error)
-            ? `${user.first_name} עדיין לא הוסיף/ה ${kindLabel[k as 'linkedin' | 'instagram']}`
-            : error.includes('user unavailable')
-              ? `${user.first_name} כבר לא זמין/ה`
-              : 'לא הצלחנו לשלוח את הבקשה',
-        'error',
-      );
+      toast(requestFailureText(error, user.first_name, k), 'error');
       return;
     }
     try { navigator.vibrate?.(30); } catch { /* noop */ }

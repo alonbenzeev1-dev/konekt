@@ -40,10 +40,27 @@ export async function alertIncoming(title: string, body: string, tag: string) {
   }
 }
 
+/**
+ * Registers the service worker and keeps installed copies fresh:
+ *  - sw.js is never served from the HTTP cache, and is re-checked every time the app comes to the foreground;
+ *  - sw.js takes over immediately (skipWaiting + clients.claim). When that happens to an app that is already open,
+ *    it reloads the next time it returns to the foreground, never while someone is typing.
+ */
 export async function registerServiceWorker() {
   if (!('serviceWorker' in navigator) || import.meta.env.DEV) return;
   try {
-    await navigator.serviceWorker.register('/sw.js');
+    const hadController = !!navigator.serviceWorker.controller; // false on the very first install: nothing to refresh
+    const reg = await navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' });
+    let newVersionReady = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (hadController) newVersionReady = true;
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') return;
+      if (newVersionReady) location.reload();
+      else void reg.update().catch(() => { /* offline */ });
+    });
+    void reg.update().catch(() => { /* offline */ });
   } catch (e) {
     console.warn('SW registration failed', e);
   }

@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Loader2, LogOut, MessageSquareHeart, Star, Trash2 } from 'lucide-react';
+import { Check, Instagram, Linkedin, Loader2, LogOut, MessageSquareHeart, Star, Trash2, UserPlus } from 'lucide-react';
 import { PhotoPicker } from '../components/PhotoPicker';
 import { LinkFields } from '../components/LinkFields';
+import { StudentCard, ctaBase } from '../components/StudentCard';
 import { CAMPUS_TAGS, MAX_TAGS } from '../lib/tags';
 import { VisibilityToggle } from '../components/VisibilityToggle';
 import { supabase } from '../lib/supabase';
@@ -96,6 +97,43 @@ export function Profile({ profile, onProfile, visible, onToggle, onSignedOut }: 
 
   return (
     <div className="space-y-5 px-4 pt-2 pb-8">
+      {/* exactly what the Nearby feed shows other students; it follows the form below as you type */}
+      <section aria-labelledby="bizcard" className="rounded-3xl border border-primary/20 bg-primary-soft/50 p-4">
+        <h2 id="bizcard" className="text-base font-extrabold text-ink">כרטיס הביקור שלך ב-KONEKT</h2>
+        <p className="mt-0.5 mb-3 text-xs text-muted">ככה אחרים רואים אותך בסביבי. מתעדכן תוך כדי עריכה (המרחק כאן לדוגמה).</p>
+        <StudentCard
+          name={name.trim() || profile.first_name}
+          headline={headline.trim() || null}
+          headlineFallback="הוסיפו שורת תיאור: תואר, שנה או תחום"
+          avatarUrl={profile.avatar_url}
+          tags={tags}
+          distanceM={25}
+          live
+          cta={
+            <div aria-hidden className={`${ctaBase} ${liNorm ? 'bg-[#0A66C2]' : 'bg-cta'} text-white`}>
+              {liNorm ? <Linkedin size={17} /> : <UserPlus size={17} />}
+              {liNorm ? 'התחבר ב-LinkedIn' : 'בקש חיבור'}
+            </div>
+          }
+        />
+        <ul className="mt-3 flex flex-wrap gap-2">
+          {liNorm ? (
+            <li className="inline-flex items-center gap-1.5 rounded-full border border-[#0A66C2]/25 bg-white px-2.5 py-1 text-xs font-bold text-[#0A66C2]">
+              <Linkedin size={13} /> מחובר עם LinkedIn <Check size={13} strokeWidth={3} />
+            </li>
+          ) : (
+            <li className="inline-flex items-center gap-1.5 rounded-full border border-danger/30 bg-white px-2.5 py-1 text-xs font-bold text-danger">
+              חסר קישור LinkedIn
+            </li>
+          )}
+          {igNorm && (
+            <li className="inline-flex items-center gap-1.5 rounded-full border border-[#DD2A7B]/25 bg-white px-2.5 py-1 text-xs font-bold text-[#B21E62]">
+              <Instagram size={13} /> Instagram
+            </li>
+          )}
+        </ul>
+      </section>
+
       <section className="card rounded-3xl p-5">
         <div className="relative">
           <PhotoPicker preview={profile.avatar_url} onPick={changePhoto} size={108} />
@@ -133,7 +171,7 @@ export function Profile({ profile, onProfile, visible, onToggle, onSignedOut }: 
                   disabled={locked}
                   onClick={() => toggleTag(t)}
                   className={`rounded-full border px-3 py-1.5 text-[13px] font-semibold transition-colors disabled:opacity-40 ${
-                    on ? 'border-primary bg-primary text-white' : 'border-line bg-card text-ink'
+                    on ? 'border-cta bg-cta text-white' : 'border-line bg-card text-ink'
                   }`}
                 >
                   {t}
