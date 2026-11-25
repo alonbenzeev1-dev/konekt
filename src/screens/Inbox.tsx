@@ -1,32 +1,72 @@
-import { useState, type ReactNode } from 'react';
-import { ArrowUpLeft, Check, Clock, EyeOff, Hourglass, Instagram, Linkedin, Loader2, MessageCircle } from 'lucide-react';
+import { useMemo, useState, type ReactNode } from 'react';
+import { ArrowUpLeft, Check, Clock, EyeOff, Hourglass, Instagram, Linkedin, Loader2, MessageCircle, Plus, Users } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
+import { CreateGroupSheet, type GroupCandidate } from '../components/CreateGroupSheet';
 import { useConnectionLink } from '../hooks/useConnectionLink';
 import { useNow } from '../hooks/useNow';
 import { toast } from '../lib/notify';
 import { kindLabel } from '../lib/social';
 import { formatClock, formatCountdown, formatHoursLeft, msLeft } from '../lib/time';
 import type { Inbox as InboxData } from '../hooks/useInbox';
-import type { ConnectionRequest, PublicProfile, RequestKind } from '../lib/types';
+import type { GroupsData } from '../hooks/useGroups';
+import type { ConnectionRequest, NearbyUser, PublicProfile, RequestKind } from '../lib/types';
 
 interface Props {
   myId: string;
   inbox: InboxData;
+  groups: GroupsData;
+  nearby: NearbyUser[];
   onOpenChat: (chatId: string) => void;
+  onOpenGroup: (groupId: string) => void;
 }
 
-export function Inbox({ myId, inbox, onOpenChat }: Props) {
+export function Inbox({ myId, inbox, groups, nearby, onOpenChat, onOpenGroup }: Props) {
   const now = useNow(1000);
+  const [creating, setCreating] = useState(false);
   const { requests, threads, people } = inbox;
+
+  // Who can be added to a group: people I'm connected to, plus visible people near me right now.
+  const candidates = useMemo<GroupCandidate[]>(() => {
+    const out = new Map<string, GroupCandidate>();
+    const connected = [
+      ...requests.filter((r) => r.status === 'accepted').map((r) => (r.sender_id === myId ? r.receiver_id : r.sender_id)),
+      ...threads.map((t) => t.partnerId),
+    ];
+    for (const id of connected) {
+      const p = people[id];
+      if (p && !out.has(id)) out.set(id, { id, first_name: p.first_name, headline: p.headline, avatar_url: p.avatar_url, source: 'connection' });
+    }
+    for (const u of nearby) {
+      if (!out.has(u.id)) out.set(u.id, { id: u.id, first_name: u.first_name, headline: u.headline, avatar_url: u.avatar_url, source: 'nearby' });
+    }
+    return [...out.values()];
+  }, [requests, threads, people, nearby, myId]);
+
+  const createGroup = async (name: string, ids: string[]) => {
+    const { error, id } = await groups.create(name, ids);
+    if (!error && id) {
+      setCreating(false);
+      onOpenGroup(id);
+    }
+    return { error };
+  };
 
   const incoming = requests.filter((r) => r.receiver_id === myId && r.status === 'pending' && msLeft(r.expires_at, now) > 0);
   const sentPending = requests.filter((r) => r.sender_id === myId && r.status === 'pending' && msLeft(r.expires_at, now) > 0);
   const links = requests.filter((r) => r.status === 'accepted' && r.kind !== 'chat');
   const liveThreads = threads.filter((t) => msLeft(t.chat.expires_at, now) > 0);
-  const empty = !incoming.length && !sentPending.length && !links.length && !liveThreads.length;
+  const empty = !incoming.length && !sentPending.length && !links.length && !liveThreads.length && !groups.summaries.length;
 
   return (
     <div className="space-y-7 px-4 pt-2 pb-6">
+      <button
+        onClick={() => setCreating(true)}
+        className="flex w-full items-center justify-center gap-2 rounded-2xl border border-primary/20 bg-primary-soft/60 py-3 text-sm font-bold text-primary transition-transform active:scale-[0.98]"
+      >
+        <Plus size={17} /> קבוצה חדשה
+      </button>
+      <CreateGroupSheet open={creating} onClose={() => setCreating(false)} candidates={candidates} onCreate={createGroup} />
+
       {empty && (
         <div className="card mt-6 rounded-3xl px-6 py-10 text-center anim-card">
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-primary-soft text-primary">
@@ -74,6 +114,36 @@ export function Inbox({ myId, inbox, onOpenChat }: Props) {
                           {formatHoursLeft(msLeft(t.chat.expires_at, now))}
                         </span>
                       )}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </Section>
+      )}
+
+      {groups.summaries.length > 0 && (
+        <Section title="קבוצות">
+          {groups.summaries.map(({ group, last }) => {
+            const count = groups.members[group.id]?.length;
+            const who = last ? (last.sender_id === myId ? 'את/ה' : groups.members[group.id]?.find((m) => m.member_id === last.sender_id)?.first_name) : null;
+            return (
+              <li key={group.id}>
+                <button
+                  onClick={() => onOpenGroup(group.id)}
+                  className="card flex w-full items-center gap-3 rounded-2xl p-3 text-start transition-transform active:scale-[0.985]"
+                >
+                  <span className="flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-full bg-primary-soft text-primary">
+                    <Users size={22} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="truncate font-bold text-ink">{group.name}</span>
+                      {last && <span className="shrink-0 text-[11px] text-muted">{formatClock(last.created_at)}</span>}
+                    </span>
+                    <span className="mt-0.5 block truncate text-sm text-muted">
+                      {last ? `${who ? who + ': ' : ''}${last.content}` : count ? `${count} חברים · עוד אין הודעות` : 'עוד אין הודעות'}
                     </span>
                   </span>
                 </button>

@@ -1,0 +1,154 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { supabase } from '../lib/supabase';
+import { alertIncoming, toast } from '../lib/notify';
+import type { Group, GroupMember, GroupMessage } from '../lib/types';
+
+type Result = { error: string | null };
+
+export interface GroupSummary {
+  group: Group;
+  last: GroupMessage | null;
+}
+
+/**
+ * Private groups, their members and messages, with Realtime. Mounted once at the app root.
+ * `activeGroupId` is the chat currently on screen — no alert for messages in it.
+ */
+export function useGroups(userId: string | null, activeGroupId: string | null) {
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [members, setMembers] = useState<Record<string, GroupMember[]>>({});
+  const [messages, setMessages] = useState<GroupMessage[]>([]);
+
+  const groupsRef = useRef(groups);
+  groupsRef.current = groups;
+  const membersRef = useRef(members);
+  membersRef.current = members;
+  const activeRef = useRef(activeGroupId);
+  activeRef.current = activeGroupId;
+  const createdByMe = useRef(new Set<string>());
+
+  const loadMembers = useCallback(async (groupId: string) => {
+    const { data, error } = await supabase.rpc('get_group_members', { grp: groupId });
+    if (error) return;
+    setMembers((prev) => ({ ...prev, [groupId]: (data ?? []) as GroupMember[] }));
+  }, []);
+
+  const load = useCallback(async () => {
+    if (!userId) return;
+    const [g, m] = await Promise.all([
+      supabase.from('groups').select('*').order('created_at', { ascending: false }),
+      supabase.from('group_messages').select('*').order('created_at', { ascending: true }).limit(2000),
+    ]);
+    if (g.error) return; // e.g. migration not applied yet — groups simply stay empty
+    const gs = (g.data ?? []) as Group[];
+    setGroups(gs);
+    setMessages((m.data ?? []) as GroupMessage[]);
+    await Promise.all(gs.map((x) => loadMembers(x.id)));
+  }, [userId, loadMembers]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useEffect(() => {
+    const onVis = () => { if (document.visibilityState === 'visible') void load(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [load]);
+
+  useEffect(() => {
+    if (!userId) return;
+    const channel = supabase
+      .channel(`groups:${userId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'group_members' }, async (payload) => {
+        const row = (payload.new ?? payload.old) as Partial<{ group_id: string; user_id: string }>;
+        if (!row.group_id) return;
+        if (payload.eventType === 'INSERT' && row.user_id === userId) {
+          const known = groupsRef.current.some((g) => g.id === row.group_id);
+          await load();
+          if (!known && !createdByMe.current.has(row.group_id)) {
+            const name = groupsRef.current.find((g) => g.id === row.group_id)?.name;
+            void alertIncoming('קבוצה חדשה', name ? `הוספו אותך ל"${name}"` : 'הוספו אותך לקבוצה', `grp-${row.group_id}`);
+          }
+        } else {
+          void loadMembers(row.group_id);
+        }
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_messages' }, (payload) => {
+        const msg = payload.new as GroupMessage;
+        setMessages((prev) => (prev.some((x) => x.id === msg.id) ? prev : [...prev, msg]));
+        if (msg.sender_id === userId || activeRef.current === msg.group_id) return;
+        const g = groupsRef.current.find((x) => x.id === msg.group_id);
+        const who = membersRef.current[msg.group_id]?.find((x) => x.member_id === msg.sender_id)?.first_name ?? 'מישהו';
+        void alertIncoming(g?.name ?? 'קבוצה', `${who}: ${msg.content.slice(0, 80)}`, `gmsg-${msg.group_id}`);
+      })
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [userId, load, loadMembers]);
+
+  const create = useCallback(
+    async (name: string, memberIds: string[]): Promise<Result & { id?: string }> => {
+      const { data, error } = await supabase.rpc('create_group', { group_name: name.trim(), member_ids: memberIds });
+      if (error) return { error: error.message };
+      const g = data as Group;
+      createdByMe.current.add(g.id);
+      setGroups((prev) => [g, ...prev.filter((x) => x.id !== g.id)]);
+      await loadMembers(g.id);
+      return { error: null, id: g.id };
+    },
+    [loadMembers],
+  );
+
+  const sendMessage = useCallback(async (groupId: string, content: string): Promise<Result> => {
+    const text = content.trim().slice(0, 1000);
+    if (!text) return { error: 'empty' };
+    const { data, error } = await supabase.rpc('send_group_message', { grp: groupId, body: text });
+    if (error) return { error: error.message };
+    const msg = data as GroupMessage;
+    setMessages((prev) => (prev.some((x) => x.id === msg.id) ? prev : [...prev, msg]));
+    return { error: null };
+  }, []);
+
+  /** "שתף LinkedIn/IG בקבוצה" — the member's own flag, applied optimistically. */
+  const setShare = useCallback(
+    async (groupId: string, share: boolean): Promise<Result> => {
+      if (!userId) return { error: 'not signed in' };
+      const patch = (on: boolean) =>
+        setMembers((prev) => ({
+          ...prev,
+          [groupId]: (prev[groupId] ?? []).map((m) => (m.member_id === userId ? { ...m, share_socials: on } : m)),
+        }));
+      patch(share);
+      const { error } = await supabase
+        .from('group_members')
+        .update({ share_socials: share })
+        .eq('group_id', groupId)
+        .eq('user_id', userId);
+      if (error) {
+        patch(!share);
+        toast('לא הצלחנו לעדכן את השיתוף', 'error');
+        return { error: error.message };
+      }
+      void loadMembers(groupId); // pick up my own links now that they are (un)shared
+      return { error: null };
+    },
+    [userId, loadMembers],
+  );
+
+  const summaries = useMemo<GroupSummary[]>(
+    () =>
+      groups
+        .map((group) => {
+          const msgs = messages.filter((m) => m.group_id === group.id);
+          return { group, last: msgs[msgs.length - 1] ?? null };
+        })
+        .sort((a, b) => (b.last?.created_at ?? b.group.created_at).localeCompare(a.last?.created_at ?? a.group.created_at)),
+    [groups, messages],
+  );
+
+  return { groups, summaries, members, messages, create, sendMessage, setShare };
+}
+
+export type GroupsData = ReturnType<typeof useGroups>;

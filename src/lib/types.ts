@@ -55,3 +55,29 @@ export interface Message {
   content: string;
   created_at: string;
 }
+
+export interface Group {
+  id: string;
+  name: string;
+  created_by: string | null;
+  created_at: string;
+}
+
+/** A group member as returned by get_group_members: links only when they chose to share. */
+export interface GroupMember {
+  member_id: string;
+  first_name: string;
+  headline: string | null;
+  avatar_url: string | null;
+  share_socials: boolean;
+  linkedin_url: string | null;
+  instagram_handle: string | null;
+}
+
+export interface GroupMessage {
+  id: string;
+  group_id: string;
+  sender_id: string;
+  content: string;
+  created_at: string;
+}

@@ -9,11 +9,13 @@ import { CompleteProfile } from './screens/CompleteProfile';
 import { Radar } from './screens/Radar';
 import { Inbox } from './screens/Inbox';
 import { Chat } from './screens/Chat';
+import { GroupChat } from './screens/GroupChat';
 import { Profile } from './screens/Profile';
 import { SetupNeeded } from './screens/SetupNeeded';
 import { usePresence } from './hooks/usePresence';
 import { useNearby } from './hooks/useNearby';
 import { useInbox } from './hooks/useInbox';
+import { useGroups } from './hooks/useGroups';
 import { useNow } from './hooks/useNow';
 import { isConfigured, linkedInIdentity, supabase } from './lib/supabase';
 import { fetchMyProfile, setVisible } from './lib/profile';
@@ -106,11 +108,13 @@ function initialTab(): Tab {
 function Main({ profile, onProfile, onSignedOut }: { profile: MyProfile; onProfile: (p: MyProfile) => void; onSignedOut: () => void }) {
   const [tab, setTab] = useState<Tab>(initialTab);
   const [chatId, setChatId] = useState<string | null>(null);
+  const [groupId, setGroupId] = useState<string | null>(null);
   const visible = profile.is_visible;
 
   const { coords, status: geo } = usePresence(profile.id, visible);
   const { users, campusCount } = useNearby(coords, visible);
   const inbox = useInbox(profile.id);
+  const groups = useGroups(profile.id, groupId);
   const now = useNow(15_000);
 
   useEffect(() => {
@@ -166,7 +170,7 @@ function Main({ profile, onProfile, onSignedOut }: { profile: MyProfile; onProfi
             onOpenChat={setChatId}
           />
         )}
-        {tab === 'inbox' && <Inbox myId={profile.id} inbox={inbox} onOpenChat={setChatId} />}
+        {tab === 'inbox' && <Inbox myId={profile.id} inbox={inbox} groups={groups} nearby={visible ? users : []} onOpenChat={setChatId} onOpenGroup={setGroupId} />}
         {tab === 'profile' && (
           <Profile profile={profile} onProfile={onProfile} visible={visible} onToggle={toggle} onSignedOut={onSignedOut} />
         )}
@@ -175,6 +179,7 @@ function Main({ profile, onProfile, onSignedOut }: { profile: MyProfile; onProfi
       <TabBar tab={tab} onTab={setTab} badge={badge} />
 
       {chatId && <Chat myId={profile.id} chatId={chatId} inbox={inbox} onBack={() => setChatId(null)} />}
+      {groupId && <GroupChat myId={profile.id} groupId={groupId} groups={groups} onBack={() => setGroupId(null)} />}
     </>
   );
 }
