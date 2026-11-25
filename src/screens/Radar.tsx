@@ -1,5 +1,5 @@
-import { useMemo, useState, type ReactNode } from 'react';
-import { ArrowUpLeft, Check, Clock, EyeOff, Instagram, Linkedin, Loader2, MapPinOff, MessageCircle, Send, UserPlus, Users } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
+import { ArrowUpLeft, Check, Clock, EyeOff, Instagram, Linkedin, Loader2, MapPinOff, MessageCircle, Send, UserPlus, Users, ChevronLeft } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
 import { BottomSheet } from '../components/BottomSheet';
 import { useConnectionLink } from '../hooks/useConnectionLink';
@@ -15,35 +15,35 @@ interface Props {
   visible: boolean;
   onShow: () => void;
   geo: GeoStatus;
-  accuracy: number | null;
   users: NearbyUser[];
   campusCount: number | null;
   inbox: Inbox;
   onOpenChat: (chatId: string) => void;
 }
 
-/** Stable pseudo-angle per user — decorative only (real bearings are never exposed). */
-function angleFor(id: string) {
-  let h = 0x811c9dc5; // FNV-1a
-  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 0x01000193) >>> 0;
-  return (h % 360) * (Math.PI / 180);
-}
+/** Friendly proximity instead of a raw distance (indoor GPS is too fuzzy for exact meters). */
+const proximityLabel = (m: number) => (m <= 30 ? 'ממש לידך' : 'באזור שלך');
 
-export function Radar({ myId, visible, onShow, geo, accuracy, users, campusCount, inbox, onOpenChat }: Props) {
+export function Radar({ myId, visible, onShow, geo, users, campusCount, inbox, onOpenChat }: Props) {
   const [selected, setSelected] = useState<NearbyUser | null>(null);
   const live = visible && geo === 'ok';
 
   return (
     <div className="px-4 pb-6">
-      <RadarScope users={live ? users : []} live={live} onSelect={setSelected} />
-
-      <div className="mt-1 mb-3 flex items-baseline justify-between px-1">
-        <h2 className="text-lg font-bold text-ink">
-          סביבך
-          {live && <span className="ms-2 text-sm font-medium text-muted">{users.length} ברדיוס {RADIUS_M} מ׳</span>}
-        </h2>
-        {live && accuracy != null && (
-          <span className={`text-[11px] ${accuracy > 40 ? 'text-danger' : 'text-muted'}`}>דיוק GPS ±{Math.round(accuracy)} מ׳</span>
+      <div
+        className={`mt-1 mb-4 flex items-center gap-2.5 rounded-2xl border px-4 py-3 ${
+          live ? 'border-live/30 bg-live-soft/60' : 'border-line bg-card'
+        }`}
+      >
+        <span className="relative flex h-2.5 w-2.5 shrink-0">
+          {live && <span className="absolute inset-0 rounded-full bg-live anim-ping" />}
+          <span className={`relative h-2.5 w-2.5 rounded-full ${live ? 'bg-live' : 'bg-muted/50'}`} />
+        </span>
+        <span className="flex-1 text-sm font-bold text-ink">
+          {live ? `פעיל בסביבה · רדיוס ${RADIUS_M} מ׳` : 'לא פעיל כרגע'}
+        </span>
+        {live && users.length > 0 && (
+          <span className="rounded-full bg-card px-2.5 py-0.5 text-xs font-bold text-live shadow-sm">{users.length} לידך</span>
         )}
       </div>
 
@@ -76,10 +76,17 @@ export function Radar({ myId, visible, onShow, geo, accuracy, users, campusCount
                   >
                     <Avatar url={u.avatar_url} name={u.first_name} size={56} live />
                     <span className="min-w-0 flex-1">
-                      <span className="block text-[17px] font-bold text-ink">{u.first_name}</span>
+                      <span className="block truncate text-[17px] font-bold text-ink">{u.first_name}</span>
                       {u.headline && <span className="block truncate text-sm text-muted">{u.headline}</span>}
+                      <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-bold text-primary">
+                        <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                        {proximityLabel(u.distance_m)}
+                      </span>
                     </span>
-                    <span className="shrink-0 rounded-full bg-primary-soft px-2.5 py-1 text-xs font-bold text-primary">~{u.distance_m} מ׳</span>
+                    <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-cta px-3 py-1.5 text-sm font-bold text-white">
+                      התחבר
+                      <ChevronLeft size={16} />
+                    </span>
                   </button>
                 </li>
               ))}
@@ -89,9 +96,9 @@ export function Radar({ myId, visible, onShow, geo, accuracy, users, campusCount
           {users.length > 0 && users.length < FEW_PEOPLE && (
             <button
               onClick={() => void inviteNearby(toast)}
-              className="mx-auto mt-3 flex items-center gap-1.5 text-xs font-bold text-primary active:opacity-70"
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-primary/20 bg-primary-soft/60 py-3 text-sm font-bold text-primary transition-transform active:scale-[0.98]"
             >
-              <UserPlus size={14} /> הזמן את מי שלידך
+              <UserPlus size={16} /> הזמן את מי שלידך
             </button>
           )}
         </>
@@ -349,54 +356,6 @@ function StateCard({ icon, title, body, action }: { icon: ReactNode; title: stri
       <h3 className="text-base font-bold text-ink">{title}</h3>
       <p className="mt-1.5 max-w-[300px] text-sm leading-relaxed text-muted">{body}</p>
       {action}
-    </div>
-  );
-}
-
-function RadarScope({ users, live, onSelect }: { users: NearbyUser[]; live: boolean; onSelect: (u: NearbyUser) => void }) {
-  const blips = useMemo(
-    () =>
-      users.slice(0, 24).map((u) => {
-        const r = Math.min(1, u.distance_m / RADIUS_M) * 0.86 + 0.08;
-        const a = angleFor(u.id);
-        return { u, x: 50 + Math.cos(a) * r * 50, y: 50 + Math.sin(a) * r * 50 };
-      }),
-    [users],
-  );
-
-  return (
-    <div className="relative mx-auto my-3 aspect-square w-full max-w-[280px]">
-      <div className="absolute inset-0 rounded-full border border-primary/20 bg-card shadow-[0_8px_30px_rgb(0_174_239/0.10)]" />
-      <div className="absolute inset-[18%] rounded-full border border-primary/15" />
-      <div className="absolute inset-[36%] rounded-full border border-primary/20" />
-      <div className="absolute inset-x-0 top-1/2 h-px bg-primary/10" />
-      <div className="absolute inset-y-0 left-1/2 w-px bg-primary/10" />
-      {live && (
-        <div className="absolute inset-0 overflow-hidden rounded-full">
-          <div
-            className="absolute inset-0 rounded-full anim-sweep"
-            style={{ background: 'conic-gradient(from 0deg, rgba(0,174,239,0.22), rgba(0,174,239,0) 70deg, transparent 360deg)' }}
-          />
-        </div>
-      )}
-      <span className="absolute top-1.5 left-1/2 -translate-x-1/2 text-[10px] text-muted">{RADIUS_M} מ׳</span>
-
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-        {live && <span className="absolute -inset-4 rounded-full border border-live/60 anim-ping" />}
-        <span className={`block h-4 w-4 rounded-full border-2 border-white shadow ${live ? 'bg-live' : 'bg-muted/50'}`} />
-      </div>
-
-      {blips.map(({ u, x, y }) => (
-        <button
-          key={u.id}
-          onClick={() => onSelect(u)}
-          className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full shadow-md transition-all duration-700"
-          style={{ left: `${x}%`, top: `${y}%` }}
-          aria-label={`${u.first_name}, ${u.distance_m} מטר`}
-        >
-          <Avatar url={u.avatar_url} name={u.first_name} size={34} />
-        </button>
-      ))}
     </div>
   );
 }

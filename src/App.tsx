@@ -160,7 +160,6 @@ function Main({ profile, onProfile, onSignedOut }: { profile: MyProfile; onProfi
             visible={visible}
             onShow={() => toggle(true)}
             geo={geo}
-            accuracy={coords?.accuracy ?? null}
             users={users}
             campusCount={campusCount}
             inbox={inbox}
