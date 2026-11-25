@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { CircleHelp, Loader2 } from 'lucide-react';
 import { Wordmark } from './components/Logo';
 import { VisibilityToggle } from './components/VisibilityToggle';
+import { HowItWorksModal, hasSeenGuide, markGuideSeen } from './components/HowItWorksModal';
 import { TabBar, type Tab } from './components/TabBar';
 import { Toaster } from './components/Toaster';
 import { Welcome } from './screens/Welcome';
@@ -112,7 +113,13 @@ function Main({ profile, onProfile, onSignedOut }: { profile: MyProfile; onProfi
   const [tab, setTab] = useState<Tab>(initialTab);
   const [chatId, setChatId] = useState<string | null>(null);
   const [groupId, setGroupId] = useState<string | null>(null);
+  const [guideOpen, setGuideOpen] = useState(() => !hasSeenGuide()); // first time in the app
   const visible = profile.is_visible;
+
+  const closeGuide = useCallback(() => {
+    markGuideSeen();
+    setGuideOpen(false);
+  }, []);
 
   const { coords, status: geo } = usePresence(profile.id, visible);
   const { users, campusCount } = useNearby(coords, visible);
@@ -156,7 +163,16 @@ function Main({ profile, onProfile, onSignedOut }: { profile: MyProfile; onProfi
       <header className="sticky top-0 z-30 border-b border-line bg-card/90 px-4 pb-3 backdrop-blur-xl safe-top">
         <div className="flex items-center justify-between pt-1">
           <Wordmark className="text-[15px]" />
-          <VisibilityToggle on={visible} onChange={toggle} />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setGuideOpen(true)}
+              aria-label="איך זה עובד?"
+              className="flex h-8 w-8 items-center justify-center rounded-full text-muted transition-colors active:bg-bg"
+            >
+              <CircleHelp size={19} />
+            </button>
+            <VisibilityToggle on={visible} onChange={toggle} />
+          </div>
         </div>
         {titles[tab] && <h1 className="mt-3 text-xl font-extrabold text-ink">{titles[tab]}</h1>}
       </header>
@@ -184,6 +200,8 @@ function Main({ profile, onProfile, onSignedOut }: { profile: MyProfile; onProfi
       </main>
 
       <TabBar tab={tab} onTab={setTab} badges={badges} />
+
+      <HowItWorksModal open={guideOpen} onClose={closeGuide} />
 
       {chatId && <Chat myId={profile.id} chatId={chatId} inbox={inbox} onBack={() => setChatId(null)} />}
       {groupId && <GroupChat myId={profile.id} groupId={groupId} groups={groups} candidates={candidates} onBack={() => setGroupId(null)} />}

@@ -104,6 +104,24 @@ export function LinkFields(p: Props) {
           קישור לפרופיל LinkedIn <span className="font-normal text-muted">(חובה)</span>
         </span>
 
+        {autoCapture && (
+          <ol className="mb-2.5 space-y-1.5 rounded-2xl border border-[#0A66C2]/20 bg-[#0A66C2]/5 p-3 text-start">
+            {[
+              ['שלב 1', 'לחצו על "פתח את הפרופיל שלי בלינקדאין"'],
+              ['שלב 2', 'באפליקציית לינקדאין לחצו על ⋯ (עוד) ← שתף פרופיל ← העתק קישור'],
+              ['שלב 3', 'חזרו לכאן — הקישור יודבק אוטומטית'],
+            ].map(([n, t], k) => (
+              <li key={n} className="flex items-start gap-2.5 text-[13px] leading-snug text-ink">
+                <span className="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#0A66C2] text-[11px] font-extrabold text-white">{k + 1}</span>
+                <span>
+                  <span className="font-bold">{n}: </span>
+                  {t}
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
+
         <div className="mb-2 grid grid-cols-1 gap-2">
           <a
             href={LI_ME}
@@ -136,9 +154,11 @@ export function LinkFields(p: Props) {
           value={linkedinSlug(linkedin)}
           onChange={(e) => onLinkedin(e.target.value)}
         />
+        {!autoCapture && (
         <p className="mt-1.5 text-[11px] leading-snug text-muted">
           בלינקדאין לחץ על <span className="font-bold text-ink">⋯ (עוד)</span> ← <span className="font-bold text-ink">שתף פרופיל</span> ← <span className="font-bold text-ink">העתק קישור</span>, וחזור לכאן.
         </p>
+        )}
         {p.linkedinError && <span className="mt-1 block text-xs text-danger">הדביקו קישור בפורמט linkedin.com/in/השם-שלכם</span>}
       </div>
 

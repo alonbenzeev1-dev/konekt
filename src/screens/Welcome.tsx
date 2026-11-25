@@ -40,7 +40,19 @@ export function Welcome() {
         <h1 dir="ltr" className="mt-6 text-4xl font-extrabold tracking-[0.14em] text-ink">KONEKT</h1>
         <p className="mt-2 text-2xl font-bold text-primary">פשוט תתחברו.</p>
 
-        <ul className="card mt-10 w-full space-y-3.5 rounded-3xl p-5 text-start">
+        <ol className="mt-6 w-full space-y-2 text-start">
+          {[
+            'ודאו שאתם בדפדפן רגיל (Safari / Chrome) ולא בתוך וואטסאפ',
+            'התחברו עם חשבון ה-LinkedIn שלכם (לזיהוי אמין בקמפוס)',
+          ].map((t, n) => (
+            <li key={t} className="flex items-center gap-3 rounded-2xl border border-primary/20 bg-primary-soft/60 px-3.5 py-2.5 text-sm font-medium text-ink">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-extrabold text-white">{n + 1}</span>
+              {t}
+            </li>
+          ))}
+        </ol>
+
+        <ul className="card mt-5 w-full space-y-3.5 rounded-3xl p-5 text-start">
           {points.map(({ Icon, text }) => (
             <li key={text} className="flex items-center gap-3 text-[15px] text-ink">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-soft text-primary">
