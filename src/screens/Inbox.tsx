@@ -1,8 +1,8 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { ArrowUpLeft, Check, Clock, EyeOff, Hourglass, Instagram, Linkedin, Loader2, MessageCircle } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
+import { useConnectionLink } from '../hooks/useConnectionLink';
 import { useNow } from '../hooks/useNow';
-import { supabase } from '../lib/supabase';
 import { toast } from '../lib/notify';
 import { kindLabel } from '../lib/social';
 import { formatClock, formatCountdown, formatHoursLeft, msLeft } from '../lib/time';
@@ -214,24 +214,9 @@ function IncomingCard({
 
 function LinkCard({ req, myId, person }: { req: ConnectionRequest; myId: string; person?: PublicProfile }) {
   const iSent = req.sender_id === myId;
-  const [link, setLink] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
+  const { link, state } = useConnectionLink(iSent ? req.id : null);
 
-  // Pre-fetch so the button is a real <a> (popup blockers dislike window.open after await).
-  useEffect(() => {
-    if (!iSent) return;
-    let cancelled = false;
-    supabase.rpc('get_connection_link', { request_id: req.id }).then(({ data }) => {
-      if (cancelled) return;
-      if (typeof data === 'string') setLink(data);
-      else setFailed(true);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [iSent, req.id]);
-
-  if (iSent && failed) return null;
+  if (iSent && (state === 'unavailable' || state === 'error')) return null;
   const label = kindLabel[req.kind];
 
   return (

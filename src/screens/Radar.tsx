@@ -1,13 +1,14 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { Check, Clock, EyeOff, Instagram, Linkedin, Loader2, MapPinOff, MessageCircle, Send, Users } from 'lucide-react';
+import { ArrowUpLeft, Check, Clock, EyeOff, Instagram, Linkedin, Loader2, MapPinOff, MessageCircle, Send, Users } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
 import { BottomSheet } from '../components/BottomSheet';
+import { useConnectionLink } from '../hooks/useConnectionLink';
 import { CAMPUS_RADIUS_M, FEW_PEOPLE, RADIUS_M } from '../hooks/useNearby';
 import { toast } from '../lib/notify';
 import { kindLabel, whatsappInviteUrl } from '../lib/social';
 import type { GeoStatus } from '../hooks/usePresence';
 import type { Inbox } from '../hooks/useInbox';
-import type { NearbyUser, RequestKind } from '../lib/types';
+import type { ConnectionRequest, NearbyUser, Platform, RequestKind } from '../lib/types';
 
 interface Props {
   myId: string;
@@ -165,15 +166,15 @@ function PersonSheet({
   const [first, setFirst] = useState('');
   const now = Date.now();
 
-  const statusFor = (k: RequestKind) =>
+  const requestFor = (k: RequestKind) =>
     inbox.requests.find(
       (x) =>
         x.sender_id === myId && x.receiver_id === user.id && x.kind === k &&
         (x.status === 'accepted' || (x.status === 'pending' && new Date(x.expires_at).getTime() > now)),
-    )?.status ?? null;
+    ) ?? null;
 
   const openChat = inbox.threads.find((t) => t.partnerId === user.id && new Date(t.chat.expires_at).getTime() > now);
-  const chatStatus = statusFor('chat');
+  const chatStatus = requestFor('chat')?.status ?? null;
 
   const request = async (k: RequestKind) => {
     setSending(k);
@@ -195,9 +196,9 @@ function PersonSheet({
     onBlocked();
   };
 
-  const platforms: { k: 'linkedin' | 'instagram'; has: boolean; Icon: typeof Linkedin }[] = [
-    { k: 'linkedin', has: user.has_linkedin, Icon: Linkedin },
-    { k: 'instagram', has: user.has_instagram, Icon: Instagram },
+  const platforms: { k: Platform; has: boolean }[] = [
+    { k: 'linkedin', has: user.has_linkedin },
+    { k: 'instagram', has: user.has_instagram },
   ];
 
   return (
@@ -249,25 +250,18 @@ function PersonSheet({
 
       <p className="mt-5 mb-2 text-xs font-bold text-muted">בקשת חיבור</p>
       <div className="grid grid-cols-2 gap-2">
-        {platforms.map(({ k, has, Icon }) => {
-          const st = statusFor(k);
-          return (
-            <button
-              key={k}
-              disabled={!has || !!st || sending !== null}
-              onClick={() => request(k)}
-              className="btn-ghost flex flex-col items-center gap-1 py-3 disabled:opacity-50"
-            >
-              <span className="flex items-center gap-1.5 text-sm font-bold">
-                {sending === k ? <Loader2 size={16} className="animate-spin" /> : <Icon size={16} className={k === 'linkedin' ? 'text-[#0A66C2]' : 'text-[#DD2A7B]'} />}
-                {kindLabel[k]}
-              </span>
-              <span className="flex items-center gap-1 text-[11px] text-muted">
-                {!has ? 'לא קיים' : st === 'accepted' ? (<><Check size={11} className="text-live" /> אושר</>) : st === 'pending' ? (<><Clock size={11} /> ממתין</>) : 'שליחת בקשה'}
-              </span>
-            </button>
-          );
-        })}
+        {platforms.map(({ k, has }) => (
+          <PlatformCard
+            key={k}
+            kind={k}
+            has={has}
+            name={user.first_name}
+            req={requestFor(k)}
+            sending={sending === k}
+            busy={sending !== null}
+            onRequest={() => request(k)}
+          />
+        ))}
       </div>
       <p className="mt-3 text-center text-[11px] text-muted">הקישור נחשף רק אם {user.first_name} מאשר/ת, תוך שעתיים.</p>
 
@@ -275,6 +269,84 @@ function PersonSheet({
         חסימה (הדדית וקבועה)
       </button>
     </div>
+  );
+}
+
+/** One "בקשת חיבור" card. Once approved it becomes a direct link to the profile. */
+function PlatformCard({
+  kind,
+  has,
+  name,
+  req,
+  sending,
+  busy,
+  onRequest,
+}: {
+  kind: Platform;
+  has: boolean;
+  name: string;
+  req: ConnectionRequest | null;
+  sending: boolean;
+  busy: boolean;
+  onRequest: () => void;
+}) {
+  const Icon = kind === 'linkedin' ? Linkedin : Instagram;
+  const accepted = has && req?.status === 'accepted';
+  const { link, state, retry } = useConnectionLink(accepted ? req.id : null);
+
+  if (accepted && link) {
+    return (
+      <a
+        href={link}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={`פתיחת ה-${kindLabel[kind]} של ${name}`}
+        className={`flex flex-col items-center gap-1 rounded-2xl py-3 text-white shadow-md transition-transform active:scale-[0.98] ${
+          kind === 'linkedin' ? 'bg-[#0A66C2]' : 'bg-gradient-to-tr from-[#F58529] via-[#DD2A7B] to-[#8134AF]'
+        }`}
+      >
+        <span className="flex items-center gap-1.5 text-sm font-bold">
+          <Icon size={16} />
+          {kindLabel[kind]}
+        </span>
+        <span className="flex items-center gap-1 text-[11px] text-white/90">
+          <Check size={11} /> אושר · פתיחת הפרופיל <ArrowUpLeft size={11} />
+        </span>
+      </a>
+    );
+  }
+
+  const failed = state === 'error';
+  return (
+    <button
+      disabled={!has || busy || (!!req && !failed)}
+      onClick={failed ? retry : onRequest}
+      className="btn-ghost flex flex-col items-center gap-1 py-3 disabled:opacity-50"
+    >
+      <span className="flex items-center gap-1.5 text-sm font-bold">
+        {sending || state === 'loading' ? (
+          <Loader2 size={16} className="animate-spin" />
+        ) : (
+          <Icon size={16} className={kind === 'linkedin' ? 'text-[#0A66C2]' : 'text-[#DD2A7B]'} />
+        )}
+        {kindLabel[kind]}
+      </span>
+      <span className="flex items-center gap-1 text-[11px] text-muted">
+        {!has ? (
+          'לא קיים'
+        ) : failed ? (
+          'הטעינה נכשלה · נסו שוב'
+        ) : state === 'unavailable' ? (
+          'הקישור לא זמין'
+        ) : accepted ? (
+          <><Check size={11} className="text-live" /> אושר</>
+        ) : req ? (
+          <><Clock size={11} /> ממתין</>
+        ) : (
+          'שליחת בקשה'
+        )}
+      </span>
+    </button>
   );
 }
 
