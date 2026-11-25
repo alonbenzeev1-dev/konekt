@@ -1,20 +1,32 @@
 import type { RequestKind } from './types';
 
-/** Accepts "linkedin.com/in/x", "https://il.linkedin.com/in/x/?utm=…" → "https://www.linkedin.com/in/x" or null. */
+const SLUG = /^[\p{L}\p{N}\-_%]+$/u;
+
+/**
+ * Accepts "linkedin.com/in/x", "https://il.linkedin.com/in/x/?utm=…" or just the slug "x"
+ * → "https://www.linkedin.com/in/x" or null. The "me" shortcut is not a real profile and is rejected.
+ */
 export function normalizeLinkedIn(input: string): string | null {
   let v = input.trim();
   if (!v) return null;
-  if (/^in\//i.test(v)) v = 'linkedin.com/' + v;
+  if (SLUG.test(v)) v = 'linkedin.com/in/' + v; // bare slug
+  else if (/^in\//i.test(v)) v = 'linkedin.com/' + v;
   if (!/^https?:\/\//i.test(v)) v = 'https://' + v;
   try {
     const u = new URL(v);
     if (!/(^|\.)linkedin\.com$/i.test(u.hostname)) return null;
     const m = u.pathname.match(/^\/in\/([^/?#]+)\/?$/i);
-    if (!m) return null;
+    if (!m || m[1].toLowerCase() === 'me') return null;
     return `https://www.linkedin.com/in/${m[1]}`;
   } catch {
     return null;
   }
+}
+
+/** Finds a LinkedIn profile link inside arbitrary clipboard text ("Check out my profile https://…"). */
+export function extractLinkedIn(text: string): string | null {
+  const m = text.match(/(?:https?:\/\/)?(?:[\w-]+\.)?linkedin\.com\/in\/[^\s/?#]+/i);
+  return m ? normalizeLinkedIn(m[0]) : null;
 }
 
 /** Accepts "@name", "name", "instagram.com/name" → "name" or null. */

@@ -120,7 +120,7 @@ export function CompleteProfile({ uid, initialName, linkedinPicture, onDone }: P
             </span>
             <input className="field" maxLength={60} value={headline} onChange={(e) => setHeadline(e.target.value)} placeholder="למשל: מדעי המחשב, שנה ב׳" />
           </label>
-          <LinkFields linkedin={linkedin} onLinkedin={setLinkedin} instagram={instagram} onInstagram={setInstagram} linkedinError={liBad} instagramError={igBad} />
+          <LinkFields linkedin={linkedin} onLinkedin={setLinkedin} instagram={instagram} onInstagram={setInstagram} linkedinError={liBad} instagramError={igBad} autoCapture />
         </div>
       </main>
 

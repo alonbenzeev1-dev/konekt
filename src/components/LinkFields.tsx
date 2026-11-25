@@ -1,4 +1,11 @@
+import { useEffect, useRef } from 'react';
 import { ClipboardPaste, ExternalLink, Instagram, Linkedin, Lock } from 'lucide-react';
+import { toast } from '../lib/notify';
+import { extractLinkedIn, normalizeInstagram, normalizeLinkedIn } from '../lib/social';
+
+const LI_PREFIX = 'https://www.linkedin.com/in/';
+/** LinkedIn redirects this to the signed-in user's own profile (app or browser). */
+const LI_ME = 'https://www.linkedin.com/in/me/';
 
 interface Props {
   linkedin: string;
@@ -7,60 +14,130 @@ interface Props {
   onInstagram: (v: string) => void;
   linkedinError?: boolean;
   instagramError?: boolean;
+  /** Onboarding: when the user returns to the tab after opening LinkedIn, pick the link off the clipboard. */
+  autoCapture?: boolean;
+}
+
+/** The part after the visual prefix: a pasted URL collapses to its slug. */
+const linkedinSlug = (v: string) => {
+  const n = normalizeLinkedIn(v);
+  return n ? n.slice(LI_PREFIX.length) : v;
+};
+const instagramHandle = (v: string) => normalizeInstagram(v) ?? v;
+
+function PrefixInput({
+  prefix,
+  icon,
+  error,
+  ...input
+}: {
+  prefix: string;
+  icon: React.ReactNode;
+  error?: boolean;
+} & React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <div
+      dir="ltr"
+      className={`field flex items-center !py-0 focus-within:border-primary focus-within:shadow-[0_0_0_3px_rgb(0_174_239/0.18)] ${error ? '!border-danger' : ''}`}
+    >
+      <span className="shrink-0">{icon}</span>
+      <span className="ms-2 shrink-0 select-none text-sm text-muted">{prefix}</span>
+      <input
+        {...input}
+        autoCapitalize="off"
+        autoCorrect="off"
+        spellCheck={false}
+        className="min-w-0 flex-1 bg-transparent py-3 text-sm text-ink outline-none placeholder:text-muted/70"
+      />
+    </div>
+  );
 }
 
 export function LinkFields(p: Props) {
-  const handlePaste = async () => {
+  const openedLinkedin = useRef(false);
+  const lastAuto = useRef('');
+  const { linkedin, onLinkedin, autoCapture } = p;
+  const linkedinValid = !!normalizeLinkedIn(linkedin);
+
+  // Back from the LinkedIn app/tab with a profile link copied → fill it in, gently:
+  // only after the user tapped "open my profile", and only for a link we have not used yet.
+  useEffect(() => {
+    if (!autoCapture || linkedinValid) return;
+    const check = async () => {
+      if (!openedLinkedin.current || document.visibilityState !== 'visible') return;
+      try {
+        const url = extractLinkedIn(await navigator.clipboard.readText());
+        if (url && url !== lastAuto.current) {
+          lastAuto.current = url;
+          onLinkedin(url);
+          toast('הקישור זוהה והודבק אוטומטית!', 'success');
+        }
+      } catch {
+        /* clipboard blocked: the manual button still works */
+      }
+    };
+    document.addEventListener('visibilitychange', check);
+    window.addEventListener('focus', check);
+    return () => {
+      document.removeEventListener('visibilitychange', check);
+      window.removeEventListener('focus', check);
+    };
+  }, [autoCapture, linkedinValid, onLinkedin]);
+
+  const pasteCopied = async () => {
+    let text = '';
     try {
-      const text = await navigator.clipboard.readText();
-      if (text?.trim()) p.onLinkedin(text.trim());
+      text = await navigator.clipboard.readText();
     } catch {
-      /* fallback: user pastes manually */
+      return toast('אין גישה ללוח. הדביקו את הקישור ידנית בשדה.', 'error');
     }
+    const url = extractLinkedIn(text);
+    if (!url) return toast('לא מצאנו קישור לפרופיל LinkedIn בלוח. העתיקו אותו ונסו שוב.', 'error');
+    onLinkedin(url);
+    toast('הקישור הודבק', 'success');
   };
 
   return (
     <div className="space-y-3">
       <div>
-        <div className="mb-1.5 flex items-center justify-between gap-2">
-          <span className="flex items-center gap-1.5 text-xs font-bold text-ink">
-            קישור לפרופיל LinkedIn <span className="font-normal text-muted">(חובה)</span>
-          </span>
+        <span className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-ink">
+          קישור לפרופיל LinkedIn <span className="font-normal text-muted">(חובה)</span>
+        </span>
+
+        <div className="mb-2 grid grid-cols-1 gap-2">
           <a
-            href="https://www.linkedin.com/public-profile/settings"
+            href={LI_ME}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 rounded-full bg-[#0A66C2]/10 px-2.5 py-1 text-[11px] font-bold text-[#0A66C2] transition hover:bg-[#0A66C2]/20"
+            onClick={() => {
+              openedLinkedin.current = true;
+            }}
+            className="flex items-center justify-center gap-1.5 rounded-xl bg-[#0A66C2] px-3 py-2.5 text-sm font-bold text-white shadow-md transition-transform active:scale-[0.98]"
           >
-            מצא את הקישור שלי
-            <ExternalLink size={11} />
+            <ExternalLink size={15} />
+            1. פתח את הפרופיל שלי בלינקדאין
           </a>
+          <button
+            type="button"
+            onClick={pasteCopied}
+            className="btn-ghost flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-bold"
+          >
+            <ClipboardPaste size={15} />
+            2. הדבק קישור שהועתק
+          </button>
         </div>
-        <div className="relative">
-          <Linkedin size={17} className="pointer-events-none absolute top-1/2 right-3.5 -translate-y-1/2 text-[#0A66C2]" />
-          <input
-            dir="ltr"
-            inputMode="url"
-            autoCapitalize="off"
-            autoCorrect="off"
-            className={`field !pr-11 ${!p.linkedin ? '!pl-20' : ''} text-right placeholder:text-right ${p.linkedinError ? '!border-danger' : ''}`}
-            placeholder="linkedin.com/in/…"
-            value={p.linkedin}
-            onChange={(e) => p.onLinkedin(e.target.value)}
-          />
-          {!p.linkedin && (
-            <button
-              type="button"
-              onClick={handlePaste}
-              className="absolute top-1/2 left-2.5 inline-flex -translate-y-1/2 items-center gap-1 rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-bold text-ink transition hover:bg-slate-200"
-            >
-              <ClipboardPaste size={13} />
-              הדבק
-            </button>
-          )}
-        </div>
+
+        <PrefixInput
+          prefix="linkedin.com/in/"
+          icon={<Linkedin size={17} className="text-[#0A66C2]" />}
+          error={p.linkedinError}
+          inputMode="url"
+          placeholder="השם-שלך"
+          value={linkedinSlug(linkedin)}
+          onChange={(e) => onLinkedin(e.target.value)}
+        />
         <p className="mt-1.5 text-[11px] leading-snug text-muted">
-          בטלפון? בפרופיל שלך בלינקדאין לחץ על <span className="font-bold text-ink">⋯ (עוד)</span> ← <span className="font-bold text-ink">שתף פרופיל</span> ← <span className="font-bold text-ink">העתק קישור</span>.
+          בלינקדאין לחץ על <span className="font-bold text-ink">⋯ (עוד)</span> ← <span className="font-bold text-ink">שתף פרופיל</span> ← <span className="font-bold text-ink">העתק קישור</span>, וחזור לכאן.
         </p>
         {p.linkedinError && <span className="mt-1 block text-xs text-danger">הדביקו קישור בפורמט linkedin.com/in/השם-שלכם</span>}
       </div>
@@ -69,18 +146,14 @@ export function LinkFields(p: Props) {
         <span className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-ink">
           Instagram <span className="font-normal text-muted">(לא חובה)</span>
         </span>
-        <div className="relative">
-          <Instagram size={17} className="pointer-events-none absolute top-1/2 right-3.5 -translate-y-1/2 text-[#DD2A7B]" />
-          <input
-            dir="ltr"
-            autoCapitalize="off"
-            autoCorrect="off"
-            className={`field !pr-11 text-right placeholder:text-right ${p.instagramError ? '!border-danger' : ''}`}
-            placeholder="@username"
-            value={p.instagram}
-            onChange={(e) => p.onInstagram(e.target.value)}
-          />
-        </div>
+        <PrefixInput
+          prefix="instagram.com/"
+          icon={<Instagram size={17} className="text-[#DD2A7B]" />}
+          error={p.instagramError}
+          placeholder="username"
+          value={instagramHandle(p.instagram)}
+          onChange={(e) => p.onInstagram(e.target.value)}
+        />
       </label>
 
       <p className="flex items-start gap-1.5 rounded-xl bg-primary-soft px-3 py-2 text-xs leading-relaxed text-ink/80">
