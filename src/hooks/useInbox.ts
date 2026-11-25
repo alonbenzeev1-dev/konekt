@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { alertIncoming } from '../lib/notify';
 import { kindLabel } from '../lib/social';
 import { isLater, loadReads, mergeReads, saveReads, type ReadMap } from '../lib/reads';
+import { HISTORY_WINDOW_MS } from '../lib/requests';
 import type { Chat, ConnectionRequest, Message, PublicProfile, RequestKind } from '../lib/types';
 
 export interface ChatThread {
@@ -54,7 +55,7 @@ export function useInbox(userId: string | null) {
 
   const load = useCallback(async (): Promise<Chat[]> => {
     if (!userId) return [];
-    const since = new Date(Date.now() - 48 * 3600_000).toISOString();
+    const since = new Date(Date.now() - HISTORY_WINDOW_MS).toISOString(); // the server deletes handled requests after 7 days
     const [r, c, m, cr] = await Promise.all([
       supabase.from('connection_requests').select('*').gte('created_at', since).order('created_at', { ascending: false }),
       supabase.from('chats').select('*'),

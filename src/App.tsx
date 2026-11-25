@@ -3,6 +3,7 @@ import { CircleHelp, Loader2 } from 'lucide-react';
 import { Wordmark } from './components/Logo';
 import { VisibilityToggle } from './components/VisibilityToggle';
 import { HowItWorksModal } from './components/HowItWorksModal';
+import { JoinInvite } from './components/JoinInvite';
 import { InstallPwaBanner } from './components/InstallPwaBanner';
 import { NotificationBell } from './components/NotificationBell';
 import { TabBar, type Tab } from './components/TabBar';
@@ -27,6 +28,7 @@ import { isConfigured, linkedInIdentity, supabase } from './lib/supabase';
 import { fetchMyProfile, setVisible } from './lib/profile';
 import { subscribeToPush, toast } from './lib/notify';
 import { msLeft } from './lib/time';
+import { capturePendingJoin, markJoinAuto } from './lib/invite';
 import type { MyProfile } from './lib/types';
 
 type Boot =
@@ -41,6 +43,7 @@ export default function App() {
 }
 
 function ConfiguredApp() {
+  useState(capturePendingJoin); // ?join=<code>: remembered now, used after sign-in / onboarding
   const [boot, setBoot] = useState<Boot>({ stage: 'loading' });
   const [profile, setProfile] = useState<MyProfile | null>(null);
 
@@ -60,6 +63,7 @@ function ConfiguredApp() {
         setBoot({ stage: 'ready' });
       } else {
         const id = linkedInIdentity(user);
+        markJoinAuto(); // a brand-new member who came through an invite joins the room without another prompt
         setBoot({ stage: 'complete', uid: user.id, name: id.firstName, picture: id.picture });
       }
     } catch {
@@ -201,6 +205,7 @@ function Main({ profile, onProfile, onSignedOut }: { profile: MyProfile; onProfi
             myId={profile.id}
             inbox={inbox}
             myLinks={{ linkedin: !!profile.linkedin_url, instagram: !!profile.instagram_handle }}
+            nearby={visible ? users : []}
             onOpenChat={setChatId}
           />}
         {tab === 'profile' && (
@@ -211,9 +216,23 @@ function Main({ profile, onProfile, onSignedOut }: { profile: MyProfile; onProfi
       <TabBar tab={tab} onTab={setTab} badges={badges} />
 
       <HowItWorksModal open={guide.open} onClose={guide.close} />
+      <JoinInvite
+        groups={groups}
+        onJoined={(id) => {
+          setTab('chats');
+          setGroupId(id);
+        }}
+      />
 
       {chatId && <Chat myId={profile.id} chatId={chatId} inbox={inbox} onBack={() => setChatId(null)} />}
-      {groupId && <GroupChat myId={profile.id} groupId={groupId} groups={groups} candidates={candidates} onBack={() => setGroupId(null)} />}
+      {groupId && <GroupChat
+          myId={profile.id}
+          groupId={groupId}
+          groups={groups}
+          candidates={candidates}
+          myLinks={{ linkedin: !!profile.linkedin_url, instagram: !!profile.instagram_handle }}
+          onBack={() => setGroupId(null)}
+        />}
     </>
   );
 }

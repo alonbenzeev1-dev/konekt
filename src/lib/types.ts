@@ -66,6 +66,11 @@ export interface Group {
   name: string;
   created_by: string | null;
   created_at: string;
+  /** Rooms: what it is and where it meets ("בניין רקנאטי"). Missing until the rooms_invites migration is applied. */
+  description?: string | null;
+  location_tag?: string | null;
+  /** The secret in ?join=<code>. */
+  invite_code?: string;
 }
 
 /** A group member as returned by get_group_members: links only when they chose to share. */
@@ -74,7 +79,10 @@ export interface GroupMember {
   first_name: string;
   headline: string | null;
   avatar_url: string | null;
+  /** LinkedIn shared in this room. */
   share_socials: boolean;
+  /** Instagram shared in this room (older servers: follows share_socials). */
+  share_instagram?: boolean;
   linkedin_url: string | null;
   instagram_handle: string | null;
 }
@@ -85,4 +93,6 @@ export interface GroupMessage {
   sender_id: string;
   content: string;
   created_at: string;
+  /** 'linkedin' = a LinkedIn card rendered from the sender's shared link. */
+  kind?: 'text' | 'linkedin';
 }

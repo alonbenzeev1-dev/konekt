@@ -19,6 +19,17 @@ export function formatHoursLeft(ms: number): string {
   return `עוד ${Math.max(1, Math.floor(ms / 60_000))} דק׳`;
 }
 
+/** When something happened, relative to the day: "היום 14:30", "אתמול 09:05", "25.11 18:20". */
+export function formatWhen(at: number, now = Date.now()): string {
+  const d = new Date(at);
+  const clock = d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+  const startOfDay = (t: number) => new Date(t).setHours(0, 0, 0, 0);
+  const days = Math.round((startOfDay(now) - startOfDay(at)) / 86_400_000);
+  if (days <= 0) return `היום ${clock}`;
+  if (days === 1) return `אתמול ${clock}`;
+  return `${d.getDate()}.${d.getMonth() + 1} ${clock}`;
+}
+
 export function formatClock(iso: string): string {
   return new Date(iso).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
 }

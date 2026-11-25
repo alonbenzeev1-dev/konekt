@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Check, Loader2, UserPlus, Users } from 'lucide-react';
+import { Check, Loader2, MapPin, UserPlus, Users } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { BottomSheet } from './BottomSheet';
 import { toast } from '../lib/notify';
+import { MAX_GROUP_MEMBERS } from '../hooks/useGroups';
 
 export interface GroupCandidate {
   id: string;
@@ -16,7 +17,7 @@ type Result = { error: string | null };
 
 /** Server errors → something a student can act on. */
 export function groupErrorText(error: string, fallback: string): string {
-  if (error.includes('too many')) return 'הקבוצה מלאה (עד 30 חברים)';
+  if (error.includes('too many')) return `החדר מלא (עד ${MAX_GROUP_MEMBERS} חברים)`;
   if (error.includes('unavailable')) return 'מישהו שבחרתם כבר לא זמין (לא לידך ולא מחובר). נסו בלעדיו.';
   return fallback;
 }
@@ -102,7 +103,7 @@ interface CreateProps {
   open: boolean;
   onClose: () => void;
   candidates: GroupCandidate[];
-  onCreate: (name: string, memberIds: string[]) => Promise<Result>;
+  onCreate: (name: string, memberIds: string[], extras: { description: string; location: string }) => Promise<Result>;
 }
 
 export function CreateGroupSheet({ open, onClose, candidates, onCreate }: CreateProps) {
@@ -115,13 +116,15 @@ export function CreateGroupSheet({ open, onClose, candidates, onCreate }: Create
 
 function CreateGroupForm({ candidates, onCreate }: Pick<CreateProps, 'candidates' | 'onCreate'>) {
   const [name, setName] = useState('');
+  const [location, setLocation] = useState('');
+  const [description, setDescription] = useState('');
   const { picked, toggle } = usePicker();
   const [busy, setBusy] = useState(false);
 
   const submit = async () => {
     if (!name.trim() || busy) return;
     setBusy(true);
-    const { error } = await onCreate(name, [...picked]);
+    const { error } = await onCreate(name, [...picked], { description, location });
     setBusy(false);
     if (error) toast(groupErrorText(error, 'לא הצלחנו ליצור את הקבוצה'), 'error');
   };
@@ -132,10 +135,30 @@ function CreateGroupForm({ candidates, onCreate }: Pick<CreateProps, 'candidates
         <span className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-soft text-primary">
           <Users size={20} />
         </span>
-        <h3 className="text-lg font-extrabold text-ink">קבוצה חדשה</h3>
+        <h3 className="text-lg font-extrabold text-ink">קבוצה / חדר חדש</h3>
       </div>
 
-      <input autoFocus value={name} maxLength={40} onChange={(e) => setName(e.target.value)} placeholder="שם הקבוצה" className="field" />
+      <input autoFocus value={name} maxLength={40} onChange={(e) => setName(e.target.value)} placeholder="שם הקבוצה או החדר" className="field" aria-label="שם" />
+      <div className="relative mt-2.5">
+        <MapPin size={16} className="pointer-events-none absolute top-1/2 end-3.5 -translate-y-1/2 text-muted" />
+        <input
+          value={location}
+          maxLength={40}
+          onChange={(e) => setLocation(e.target.value)}
+          placeholder="איפה? (לא חובה) למשל: בניין רקנאטי"
+          className="field !pe-10"
+          aria-label="מיקום"
+        />
+      </div>
+      <textarea
+        value={description}
+        maxLength={160}
+        rows={2}
+        onChange={(e) => setDescription(e.target.value)}
+        placeholder="תיאור קצר (לא חובה): על מה החדר?"
+        className="field mt-2.5 resize-none"
+        aria-label="תיאור"
+      />
 
       <p className="mt-5 mb-1 text-xs font-bold text-muted">
         מי מצטרף? {picked.size > 0 && <span className="text-primary">· נבחרו {picked.size}</span>}
@@ -146,7 +169,7 @@ function CreateGroupForm({ candidates, onCreate }: Pick<CreateProps, 'candidates
           עוד אין חיבורים או אנשים לידך. אפשר ליצור קבוצה ריקה ולהוסיף אחר כך.
         </p>
       ) : (
-        <CandidateList candidates={candidates} picked={picked} onToggle={toggle} limit={29} />
+        <CandidateList candidates={candidates} picked={picked} onToggle={toggle} limit={MAX_GROUP_MEMBERS - 1} />
       )}
 
       <button
@@ -155,7 +178,7 @@ function CreateGroupForm({ candidates, onCreate }: Pick<CreateProps, 'candidates
         className="btn-primary mt-5 flex w-full items-center justify-center gap-2 py-3.5"
       >
         {busy ? <Loader2 size={18} className="animate-spin" /> : <Users size={18} />}
-        יצירת קבוצה{picked.size > 0 ? ` עם ${picked.size}` : ''}
+        יצירה{picked.size > 0 ? ` עם ${picked.size}` : ''}
       </button>
     </div>
   );
@@ -203,7 +226,7 @@ function AddMembersForm({ candidates, slots, onAdd, onClose }: Omit<AddProps, 'o
         <h3 className="text-lg font-extrabold text-ink">הוספת משתתפים</h3>
       </div>
       <p className="mb-1 text-xs text-muted">
-        {slots > 0 ? `אפשר להוסיף עוד ${slots} (עד 30 בקבוצה)` : 'הקבוצה מלאה (30 חברים)'}
+        {slots > 0 ? `אפשר להוסיף עוד ${slots} (עד ${MAX_GROUP_MEMBERS} בחדר)` : `החדר מלא (${MAX_GROUP_MEMBERS} חברים)`}
         {picked.size > 0 && <span className="font-bold text-primary"> · נבחרו {picked.size}</span>}
       </p>
 

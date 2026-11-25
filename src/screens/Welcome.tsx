@@ -4,6 +4,7 @@ import { KonektLogo } from '../components/KonektLogo';
 import { signInWithLinkedIn } from '../lib/supabase';
 import { toast } from '../lib/notify';
 import { copyText, inAppBrowserName } from '../lib/inapp';
+import { getPendingJoin, inviteUrl } from '../lib/invite';
 
 const STEPS = [
   'ודאו שאתם בדפדפן רגיל (Safari / Chrome) ולא בתוך וואטסאפ',
@@ -20,7 +21,9 @@ export function Welcome() {
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const inApp = inAppBrowserName();
-  const openUrl = window.location.origin + '/';
+  const pendingJoin = getPendingJoin();
+  // keep the invite when the link is copied out of an in-app browser (its storage is not shared with Safari / Chrome)
+  const openUrl = pendingJoin ? inviteUrl(pendingJoin) : window.location.origin + '/';
 
   const copyLink = async () => {
     const ok = await copyText(openUrl);
@@ -89,6 +92,11 @@ export function Welcome() {
             </button>
             <p dir="ltr" className="mt-2 select-all text-center text-[11px] break-all text-amber-900/70">{openUrl}</p>
           </div>
+        )}
+        {pendingJoin && (
+          <p className="mb-3 rounded-2xl border border-primary/20 bg-primary-soft/60 px-3.5 py-2.5 text-center text-sm font-medium text-ink">
+            קיבלתם הזמנה לחדר. אחרי ההתחברות תצטרפו אליו.
+          </p>
         )}
         <button onClick={login} disabled={busy} className="btn-primary flex w-full items-center justify-center gap-2.5 py-4 text-lg">
           {busy ? <Loader2 size={20} className="animate-spin" /> : <Linkedin size={20} />}

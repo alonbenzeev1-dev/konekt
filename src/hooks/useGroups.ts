@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { alertIncoming, toast } from '../lib/notify';
 import { isLater, loadReads, mergeReads, saveReads, type ReadMap } from '../lib/reads';
+import { isMissingFunction } from '../lib/rpc';
 import type { Group, GroupMember, GroupMessage } from '../lib/types';
 
 /** Local mirror of group_members.last_read_at: fallback while offline / before the read_state migration. */
@@ -9,7 +10,18 @@ const GROUP_READ_KEY = 'konekt-group-read';
 
 type Result = { error: string | null };
 
-export const MAX_GROUP_MEMBERS = 30;
+/** Rooms can be a whole lecture hall (the server enforces the same number). */
+export const MAX_GROUP_MEMBERS = 200;
+
+/** What the "join this room?" prompt shows for an invite code. */
+export interface InvitePreview {
+  name: string;
+  description: string | null;
+  location_tag: string | null;
+  member_count: number;
+  already_member: boolean;
+  group_id: string | null;
+}
 
 export interface GroupSummary {
   group: Group;
@@ -131,16 +143,55 @@ export function useGroups(userId: string | null, activeGroupId: string | null) {
   }, [userId, load, loadMembers]);
 
   const create = useCallback(
-    async (name: string, memberIds: string[]): Promise<Result & { id?: string }> => {
-      const { data, error } = await supabase.rpc('create_group', { group_name: name.trim(), member_ids: memberIds });
-      if (error) return { error: error.message };
-      const g = data as Group;
+    async (
+      name: string,
+      memberIds: string[],
+      extras?: { description?: string; location?: string },
+    ): Promise<Result & { id?: string; extrasDropped?: boolean }> => {
+      const base = { group_name: name.trim(), member_ids: memberIds };
+      const description = extras?.description?.trim() ?? '';
+      const location = extras?.location?.trim() ?? '';
+      const hasExtras = !!(description || location);
+      let res = hasExtras
+        ? await supabase.rpc('create_group', { ...base, group_description: description || null, group_location: location || null })
+        : await supabase.rpc('create_group', base);
+      let extrasDropped = false;
+      if (res.error && hasExtras && isMissingFunction(res.error)) {
+        // rooms_invites.sql not applied yet: still create the group, without description / place
+        extrasDropped = true;
+        res = await supabase.rpc('create_group', base);
+      }
+      if (res.error) return { error: res.error.message };
+      const g = res.data as Group;
       createdByMe.current.add(g.id);
       setGroups((prev) => [g, ...prev.filter((x) => x.id !== g.id)]);
       await loadMembers(g.id);
-      return { error: null, id: g.id };
+      return { error: null, id: g.id, extrasDropped };
     },
     [loadMembers],
+  );
+
+  /** What an invite code leads to (name, place, head-count), without joining. null = not valid. */
+  const previewInvite = useCallback(async (code: string): Promise<InvitePreview | null> => {
+    const { data, error } = await supabase.rpc('preview_group_invite', { code });
+    if (error) {
+      console.warn('preview_group_invite failed', error.message);
+      return null;
+    }
+    return ((Array.isArray(data) ? data[0] : data) as InvitePreview | undefined) ?? null;
+  }, []);
+
+  /** Join through an invite code (QR or link). Resolves once the room is loaded, ready to open. */
+  const joinByCode = useCallback(
+    async (code: string): Promise<Result & { id?: string }> => {
+      const { data, error } = await supabase.rpc('join_group_by_code', { code });
+      if (error) return { error: error.message };
+      const g = data as Group;
+      createdByMe.current.add(g.id); // no "someone added you" alert for a room I walked into myself
+      await load();
+      return { error: null, id: g.id };
+    },
+    [load],
   );
 
   /** Any member can add connections / people nearby (server enforces eligibility and the 30 cap). */
@@ -231,6 +282,48 @@ export function useGroups(userId: string | null, activeGroupId: string | null) {
     return out;
   }, [messages, reads, userId]);
 
+  /** "שתף את ה-LinkedIn שלי בחדר": share my link in this room and post a LinkedIn card (older servers: just the share flag). */
+  const shareLinkedIn = useCallback(
+    async (groupId: string): Promise<Result> => {
+      const { data, error } = await supabase.rpc('share_linkedin_in_group', { grp: groupId });
+      if (error) {
+        if (isMissingFunction(error)) return setShare(groupId, true);
+        return { error: error.message };
+      }
+      const msg = data as GroupMessage;
+      setMessages((prev) => (prev.some((x) => x.id === msg.id) ? prev : [...prev, msg]));
+      setMembers((prev) => ({
+        ...prev,
+        [groupId]: (prev[groupId] ?? []).map((m) => (m.member_id === userId ? { ...m, share_socials: true } : m)),
+      }));
+      void loadMembers(groupId); // my link is now part of the room's member list
+      return { error: null };
+    },
+    [userId, loadMembers, setShare],
+  );
+
+  /** Instagram has its own switch inside a room. */
+  const setShareInstagram = useCallback(
+    async (groupId: string, share: boolean): Promise<Result> => {
+      if (!userId) return { error: 'not signed in' };
+      const patch = (on: boolean) =>
+        setMembers((prev) => ({
+          ...prev,
+          [groupId]: (prev[groupId] ?? []).map((m) => (m.member_id === userId ? { ...m, share_instagram: on } : m)),
+        }));
+      patch(share);
+      const { error } = await supabase.from('group_members').update({ share_instagram: share }).eq('group_id', groupId).eq('user_id', userId);
+      if (error) {
+        patch(!share);
+        toast('לא הצלחנו לעדכן את שיתוף ה-Instagram', 'error');
+        return { error: error.message };
+      }
+      void loadMembers(groupId);
+      return { error: null };
+    },
+    [userId, loadMembers],
+  );
+
   const summaries = useMemo<GroupSummary[]>(
     () =>
       groups
@@ -242,7 +335,25 @@ export function useGroups(userId: string | null, activeGroupId: string | null) {
     [groups, messages],
   );
 
-  return { groups, summaries, members, messages, unread, markRead, create, addMembers, leave, sendMessage, setShare, refreshMembers: loadMembers };
+  return {
+    groups,
+    summaries,
+    members,
+    messages,
+    unread,
+    markRead,
+    create,
+    previewInvite,
+    joinByCode,
+    addMembers,
+    leave,
+    sendMessage,
+    setShare,
+    shareLinkedIn,
+    setShareInstagram,
+    refresh: load,
+    refreshMembers: loadMembers,
+  };
 }
 
 export type GroupsData = ReturnType<typeof useGroups>;

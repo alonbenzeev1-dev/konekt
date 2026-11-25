@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, Check, Instagram, Linkedin, LogOut, SendHorizontal, UserPlus, Users } from 'lucide-react';
+import { ArrowRight, Check, ChevronLeft, Instagram, Linkedin, Loader2, LogOut, MapPin, QrCode, SendHorizontal, UserPlus, Users } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
 import { BottomSheet } from '../components/BottomSheet';
 import { AddMembersSheet, type GroupCandidate } from '../components/CreateGroupSheet';
+import { InviteSheet } from '../components/InviteSheet';
+import { ctaBase } from '../components/StudentCard';
 import { toast } from '../lib/notify';
 import { instagramUrl, normalizeInstagram, safeProfileUrl } from '../lib/social';
 import { formatClock } from '../lib/time';
 import { MAX_GROUP_MEMBERS, type GroupsData } from '../hooks/useGroups';
+import type { GroupMember, Platform } from '../lib/types';
 
 interface Props {
   myId: string;
@@ -14,21 +17,62 @@ interface Props {
   groups: GroupsData;
   /** Connections + people nearby, for "הוסף משתתף". */
   candidates: GroupCandidate[];
+  /** Which of MY links exist: decides whether sharing them is possible. */
+  myLinks: Record<Platform, boolean>;
   onBack: () => void;
 }
 
-export function GroupChat({ myId, groupId, groups, candidates, onBack }: Props) {
+/** Instagram is its own switch; rooms created before that existed fall back to the LinkedIn flag. */
+const sharesInstagram = (m: GroupMember) => m.share_instagram ?? m.share_socials;
+
+/** Pills that open a member's shared profiles. Only what they chose to share in THIS room. */
+function MemberLinks({ m }: { m: GroupMember }) {
+  const li = safeProfileUrl(m.linkedin_url);
+  const igHandle = m.instagram_handle ? normalizeInstagram(m.instagram_handle) : null;
+  if (!li && !igHandle) return null;
+  return (
+    <div className="mt-2.5 flex gap-2">
+      {li && (
+        <a
+          href={li}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`פתיחת הפרופיל של ${m.first_name} ב-LinkedIn`}
+          className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#0A66C2] px-3 text-sm font-bold text-white active:scale-[0.98]"
+        >
+          <Linkedin size={16} /> פתח ב-LinkedIn ↗
+        </a>
+      )}
+      {igHandle && (
+        <a
+          href={instagramUrl(igHandle)}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`Instagram של ${m.first_name}`}
+          className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl bg-gradient-to-tr from-[#F58529] via-[#DD2A7B] to-[#8134AF] text-white active:scale-[0.98]"
+        >
+          <Instagram size={18} />
+        </a>
+      )}
+    </div>
+  );
+}
+
+export function GroupChat({ myId, groupId, groups, candidates, myLinks, onBack }: Props) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
+  const [showInvite, setShowInvite] = useState(false);
   const [adding, setAdding] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
   const group = groups.groups.find((g) => g.id === groupId);
   const members = useMemo(() => groups.members[groupId] ?? [], [groups.members, groupId]);
   const me = members.find((m) => m.member_id === myId);
-  const sharing = !!me?.share_socials;
+  const sharedLinkedIn = !!me?.share_socials;
+  const sharedInstagram = me ? sharesInstagram(me) : false;
   const byId = useMemo(() => new Map(members.map((m) => [m.member_id, m])), [members]);
   const msgs = useMemo(() => groups.messages.filter((m) => m.group_id === groupId), [groups.messages, groupId]);
   const slots = Math.max(0, MAX_GROUP_MEMBERS - members.length);
@@ -44,14 +88,14 @@ export function GroupChat({ myId, groupId, groups, candidates, onBack }: Props) 
   };
 
   const leave = async () => {
-    if (leaving || !group || !window.confirm(`לעזוב את "${group.name}"? לא תראו יותר את ההודעות בקבוצה.`)) return;
+    if (leaving || !group || !window.confirm(`לעזוב את "${group.name}"? לא תראו יותר את ההודעות בחדר.`)) return;
     setLeaving(true);
     const { error } = await groups.leave(groupId);
     setLeaving(false);
-    if (error) return toast('לא הצלחנו לעזוב את הקבוצה', 'error');
+    if (error) return toast('לא הצלחנו לעזוב', 'error');
     toast(`עזבת את "${group.name}"`, 'info');
     setShowMembers(false);
-    history.back(); // popstate → back to the Inbox
+    history.back(); // popstate → back to the chats list
   };
 
   const { markRead } = groups;
@@ -87,66 +131,155 @@ export function GroupChat({ myId, groupId, groups, candidates, onBack }: Props) 
     else setText('');
   };
 
-  const toggleShare = async () => {
-    const { error } = await groups.setShare(groupId, !sharing);
-    if (!error) {
-      toast(!sharing ? 'חברי הקבוצה יכולים לראות את ה-LinkedIn וה-Instagram שלך' : 'הפסקת לשתף את הקישורים בקבוצה', 'info');
-    }
+  /** "שתף את ה-LinkedIn שלי בחדר": my link becomes visible to the room and a card is posted in the chat. */
+  const shareLinkedIn = async () => {
+    if (sharing) return;
+    setSharing(true);
+    const { error } = await groups.shareLinkedIn(groupId);
+    setSharing(false);
+    if (error) return toast(error.includes('no linkedin') ? 'צריך קודם להוסיף קישור LinkedIn בפרופיל' : 'לא הצלחנו לשתף. נסו שוב.', 'error');
+    toast('ה-LinkedIn שלך משותף בחדר', 'success');
+  };
+
+  const stopLinkedIn = async () => {
+    const { error } = await groups.setShare(groupId, false);
+    if (!error) toast('הפסקת לשתף את ה-LinkedIn בחדר', 'info');
   };
 
   return (
     <div className="fixed inset-0 z-40 mx-auto flex max-w-[480px] flex-col bg-bg anim-fade">
-      <header className="border-b border-line bg-card px-3 pb-3 safe-top">
-        <div className="flex items-center gap-3">
-          <button onClick={() => history.back()} className="rounded-full p-2 text-ink active:bg-bg" aria-label="חזרה">
+      <header className="border-b border-line bg-card px-3 pb-2.5 safe-top">
+        <div className="flex items-center gap-1.5">
+          <button onClick={() => history.back()} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-ink active:bg-bg" aria-label="חזרה">
             <ArrowRight size={22} />
           </button>
-          <button onClick={openMembers} className="flex min-w-0 flex-1 items-center gap-3 text-start">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-soft text-primary">
+          <button onClick={openMembers} className="flex min-h-[44px] min-w-0 flex-1 items-center gap-2.5 text-start">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-soft text-cta">
               <Users size={20} />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate font-bold text-ink">{group?.name ?? '…'}</span>
-              <span className="block text-[11px] text-muted">{members.length} חברים · לחצו לרשימה</span>
+              <span dir="auto" className="block truncate text-right font-bold text-ink">{group?.name ?? '…'}</span>
+              <span className="flex items-center gap-1.5 text-[11px] text-muted">
+                {group?.location_tag && (
+                  <span className="inline-flex min-w-0 items-center gap-0.5 font-medium text-cta-press">
+                    <MapPin size={11} className="shrink-0" />
+                    <span className="truncate">{group.location_tag}</span>
+                  </span>
+                )}
+                <span className="shrink-0 tabular-nums">{members.length} חברים</span>
+              </span>
             </span>
+            <ChevronLeft size={16} className="shrink-0 text-muted" />
+          </button>
+          <button
+            onClick={() => setShowInvite(true)}
+            disabled={!group}
+            className="flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-xl border border-primary/25 bg-primary-soft px-3 text-sm font-bold text-cta-press active:scale-[0.97] disabled:opacity-50"
+          >
+            <QrCode size={17} />
+            הזמנה / QR
           </button>
         </div>
-        <button
-          onClick={toggleShare}
-          aria-pressed={sharing}
-          disabled={!me}
-          className={`mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition-colors ${
-            sharing ? 'border-primary bg-primary text-white' : 'border-primary/30 bg-primary-soft/60 text-primary'
-          }`}
-        >
-          {sharing && <Check size={13} />}
-          שתף LinkedIn/IG בקבוצה
-        </button>
       </header>
+
+      {/* one tap: share my LinkedIn with everyone in the room */}
+      <div className="border-b border-line bg-card px-3 py-2.5">
+        {sharedLinkedIn ? (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            <span className="flex min-w-0 flex-1 items-center gap-1.5 text-sm font-bold text-[#0A66C2]">
+              <Check size={16} strokeWidth={3} className="shrink-0" />
+              <span className="truncate">ה-LinkedIn שלך משותף בחדר</span>
+            </span>
+            {myLinks.instagram && (
+              <button
+                onClick={() => void groups.setShareInstagram(groupId, !sharedInstagram)}
+                aria-pressed={sharedInstagram}
+                className={`flex min-h-[44px] items-center gap-1.5 rounded-xl border px-3 text-xs font-bold ${
+                  sharedInstagram ? 'border-[#B21E62] bg-[#B21E62] text-white' : 'border-line bg-card text-ink'
+                }`}
+              >
+                <Instagram size={14} /> {sharedInstagram ? 'Instagram משותף' : 'שתף גם Instagram'}
+              </button>
+            )}
+            <button onClick={stopLinkedIn} className="min-h-[44px] px-1 text-xs font-bold text-muted underline-offset-2 active:underline">
+              הפסק
+            </button>
+          </div>
+        ) : (
+          <>
+            <button
+              onClick={shareLinkedIn}
+              disabled={!myLinks.linkedin || sharing || !me}
+              className={`${ctaBase} bg-[#0A66C2] text-white active:scale-[0.98] disabled:opacity-50`}
+            >
+              {sharing ? <Loader2 size={17} className="animate-spin" /> : <Linkedin size={17} />}
+              שתף את ה-LinkedIn שלי בחדר
+            </button>
+            {!myLinks.linkedin && <p className="mt-1.5 text-center text-[11px] text-muted">הוסיפו קישור LinkedIn בפרופיל כדי לשתף אותו</p>}
+          </>
+        )}
+      </div>
 
       <main className="flex-1 space-y-1.5 overflow-y-auto px-3 py-4">
         <p className="mx-auto mb-3 w-fit max-w-full rounded-full bg-card px-3 py-1 text-center text-[11px] text-muted shadow-sm">
-          🔒 קבוצה פרטית · רק החברים רואים את ההודעות
+          🔒 חדר פרטי · רק החברים רואים את ההודעות
         </p>
-        {!group && <p className="pt-6 text-center text-sm text-muted">הקבוצה לא זמינה.</p>}
+        {group?.description && <p dir="auto" className="mx-auto mb-3 max-w-[320px] text-center text-xs leading-relaxed text-ink/70">{group.description}</p>}
+        {!group && <p className="pt-6 text-center text-sm text-muted">החדר לא זמין.</p>}
         {group && msgs.length === 0 && <p className="pt-6 text-center text-sm text-muted">עוד אין הודעות. תפתחו את השיחה 👋</p>}
         {msgs.map((m, i) => {
           const mine = m.sender_id === myId;
           const first = msgs[i - 1]?.sender_id !== m.sender_id;
           const sender = byId.get(m.sender_id);
+          const avatar = (
+            <span className="me-2 mt-auto w-7 shrink-0">
+              {first ? <Avatar url={sender?.avatar_url ?? null} name={sender?.first_name ?? '?'} size={28} /> : null}
+            </span>
+          );
+
+          if (m.kind === 'linkedin') {
+            const li = sender ? safeProfileUrl(sender.linkedin_url) : null;
+            return (
+              <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'} pt-2`}>
+                {!mine && avatar}
+                <div className="w-[82%] max-w-[300px] rounded-2xl border border-[#0A66C2]/20 bg-card p-3 shadow-sm">
+                  <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold text-[#0A66C2]">
+                    <Linkedin size={13} /> {mine ? 'שיתפת את ה-LinkedIn שלך' : 'שיתף/ה את ה-LinkedIn'}
+                  </p>
+                  <div className="flex items-center gap-2.5">
+                    <Avatar url={sender?.avatar_url ?? null} name={sender?.first_name ?? '?'} size={44} />
+                    <span className="min-w-0 flex-1">
+                      <span dir="auto" className="block truncate text-right font-bold text-ink">{sender?.first_name ?? 'מישהו'}</span>
+                      {sender?.headline && <span dir="auto" className="line-clamp-2 block text-right text-xs leading-snug text-ink/70">{sender.headline}</span>}
+                    </span>
+                  </div>
+                  {li ? (
+                    <a
+                      href={li}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`${ctaBase} mt-2.5 bg-[#0A66C2] text-white active:scale-[0.98]`}
+                    >
+                      <Linkedin size={16} /> פתח ב-LinkedIn ↗
+                    </a>
+                  ) : (
+                    <p className="mt-2.5 rounded-xl bg-bg px-3 py-2 text-center text-xs text-muted">הקישור כבר לא משותף בחדר</p>
+                  )}
+                  <p className="mt-1.5 text-[10px] text-muted tabular-nums">{formatClock(m.created_at)}</p>
+                </div>
+              </div>
+            );
+          }
+
           return (
             <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'} ${first ? 'pt-2' : ''}`}>
-              {!mine && (
-                <span className="me-2 mt-auto w-7 shrink-0">
-                  {first ? <Avatar url={sender?.avatar_url ?? null} name={sender?.first_name ?? '?'} size={28} /> : null}
-                </span>
-              )}
+              {!mine && avatar}
               <div
                 className={`max-w-[78%] rounded-2xl px-3.5 py-2 text-[15px] leading-snug shadow-sm ${
                   mine ? 'rounded-se-md bg-cta text-white' : 'rounded-ss-md bg-card text-ink'
                 }`}
               >
-                {!mine && first && <p className="mb-0.5 text-[12px] font-bold text-primary">{sender?.first_name ?? 'מישהו'}</p>}
+                {!mine && first && <p className="mb-0.5 text-[12px] font-bold text-cta-press">{sender?.first_name ?? 'מישהו'}</p>}
                 <p className="whitespace-pre-wrap break-words">{m.content}</p>
                 <p className={`mt-0.5 text-[10px] tabular-nums ${mine ? 'text-white/80' : 'text-muted'}`}>{formatClock(m.created_at)}</p>
               </div>
@@ -175,7 +308,7 @@ export function GroupChat({ myId, groupId, groups, candidates, onBack }: Props) 
               void send();
             }
           }}
-          placeholder="כתבו הודעה לקבוצה…"
+          placeholder="כתבו הודעה לחדר…"
           className="field max-h-32 min-h-[46px] flex-1 resize-none !rounded-3xl !bg-bg !py-2.5"
         />
         <button
@@ -189,61 +322,52 @@ export function GroupChat({ myId, groupId, groups, candidates, onBack }: Props) 
       </form>
 
       <BottomSheet open={showMembers} onClose={() => setShowMembers(false)}>
-        <h3 className="mb-3 text-lg font-extrabold text-ink">
-          {group?.name} <span className="text-sm font-medium text-muted">· {members.length} חברים</span>
+        <h3 className="text-lg font-extrabold text-ink">
+          <span dir="auto">{group?.name}</span> <span className="text-sm font-medium text-muted tabular-nums">· {members.length} חברים</span>
         </h3>
-        <ul className="space-y-2">
+        {group?.location_tag && (
+          <p className="mt-1 inline-flex items-center gap-1 rounded-full bg-primary-soft px-2.5 py-1 text-xs font-bold text-cta-press">
+            <MapPin size={12} /> {group.location_tag}
+          </p>
+        )}
+        {group?.description && <p dir="auto" className="mt-2 text-sm leading-relaxed text-ink/70">{group.description}</p>}
+
+        <ul className="mt-3 space-y-2">
           {members.map((m) => (
-            <li key={m.member_id} className="card flex items-center gap-3 rounded-2xl p-3">
-              <Avatar url={m.avatar_url} name={m.first_name} size={44} />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-bold text-ink">
-                  {m.first_name}
-                  {m.member_id === myId && <span className="ms-1.5 text-xs font-medium text-muted">(את/ה)</span>}
+            <li key={m.member_id} className="card rounded-2xl p-3">
+              <div className="flex items-center gap-3">
+                <Avatar url={m.avatar_url} name={m.first_name} size={44} />
+                <span className="min-w-0 flex-1">
+                  <span dir="auto" className="block truncate text-right font-bold text-ink">
+                    {m.first_name}
+                    {m.member_id === myId && <span className="ms-1.5 text-xs font-medium text-muted">(את/ה)</span>}
+                  </span>
+                  {m.headline && <span dir="auto" className="line-clamp-2 block text-right text-xs leading-snug text-ink/70">{m.headline}</span>}
                 </span>
-                {m.headline && <span className="block truncate text-xs text-muted">{m.headline}</span>}
-              </span>
-              <span className="flex shrink-0 items-center gap-1.5">
-                {safeProfileUrl(m.linkedin_url) && (
-                  <a
-                    href={safeProfileUrl(m.linkedin_url) as string}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label={`LinkedIn של ${m.first_name}`}
-                    className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0A66C2] text-white active:scale-95"
-                  >
-                    <Linkedin size={17} />
-                  </a>
-                )}
-                {normalizeInstagram(m.instagram_handle ?? '') && (
-                  <a
-                    href={instagramUrl(normalizeInstagram(m.instagram_handle ?? '') as string)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label={`Instagram של ${m.first_name}`}
-                    className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-tr from-[#F58529] via-[#DD2A7B] to-[#8134AF] text-white active:scale-95"
-                  >
-                    <Instagram size={17} />
-                  </a>
-                )}
-              </span>
+              </div>
+              <MemberLinks m={m} />
             </li>
           ))}
         </ul>
-        <p className="mt-3 text-center text-[11px] text-muted">קישורים מופיעים רק אצל מי ששיתף אותם בקבוצה הזו.</p>
+        <p className="mt-3 text-center text-[11px] text-muted">כל חברי החדר רואים שם, תמונה ותיאור. קישורים מופיעים רק למי ששיתף אותם בחדר הזה.</p>
 
-        <button
-          onClick={() => setAdding(true)}
-          disabled={slots === 0}
-          className="btn-primary mt-4 flex w-full items-center justify-center gap-2 py-3 disabled:opacity-50"
-        >
-          <UserPlus size={18} />
-          {slots === 0 ? 'הקבוצה מלאה (30)' : 'הוסף משתתף'}
-        </button>
+        <div className="mt-4 space-y-2">
+          <button onClick={() => { setShowMembers(false); setShowInvite(true); }} className="btn-ghost flex w-full items-center justify-center gap-2 text-sm font-bold">
+            <QrCode size={17} /> הזמנה / QR
+          </button>
+          <button
+            onClick={() => setAdding(true)}
+            disabled={slots === 0}
+            className="btn-primary flex w-full items-center justify-center gap-2 disabled:opacity-50"
+          >
+            <UserPlus size={18} />
+            {slots === 0 ? `החדר מלא (${MAX_GROUP_MEMBERS})` : 'הוסף משתתף'}
+          </button>
+        </div>
         <button
           onClick={leave}
           disabled={leaving}
-          className="mx-auto mt-3 flex items-center gap-1.5 py-1.5 text-sm font-bold text-danger disabled:opacity-50"
+          className="mx-auto mt-3 flex min-h-[44px] items-center gap-1.5 px-3 text-sm font-bold text-danger disabled:opacity-50"
         >
           <LogOut size={15} className="-scale-x-100" />
           עזוב קבוצה
@@ -257,6 +381,7 @@ export function GroupChat({ myId, groupId, groups, candidates, onBack }: Props) 
         slots={slots}
         onAdd={(ids) => groups.addMembers(groupId, ids)}
       />
+      {group && <InviteSheet open={showInvite} onClose={() => setShowInvite(false)} group={group} />}
     </div>
   );
 }

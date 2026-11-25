@@ -15,6 +15,7 @@ Commands: `npm run dev`, `npm run build` (`tsc -b && vite build`; must be clean 
 - `supabase/migrations/private_groups.sql` private groups (groups, group_members, group_messages + RPCs); apply after the main schema
 - `supabase/migrations/read_state.sql` server-side read state: group_members.last_read_at, chat_reads, mark_chat_read / mark_group_read
 - `supabase/migrations/mutual_approval.sql` respond_request(request_id, accept, share_back)
+- `supabase/migrations/rooms_invites.sql` groups become rooms: description + place, invite_code (QR / ?join=<code>), 200 members, LinkedIn cards (share_linkedin_in_group), separate share_instagram
 - `supabase/migrations/campus_tags.sql` profiles.tags (max 3) + get_nearby_users returning tags
 - `supabase/functions/` import-avatar, push
 
@@ -26,6 +27,13 @@ Commands: `npm run dev`, `npm run build` (`tsc -b && vite build`; must be clean 
 - To get the other person's link back, the receiver must send their own request ("בקש גם ... חזרה" on the Inbox link card).
 - The client loads only the last 48 h of requests, so approved links older than that disappear from the UI.
 - Blocks are mutual, permanent and silent.
+
+## Rooms and invites
+- Invite URL is `https://konekt-nu.vercel.app/?join=<code>` (fixed origin). `capturePendingJoin()` (src/lib/invite.ts) stores the code in localStorage on first load and strips it from the URL, so it survives the LinkedIn redirect and onboarding. A brand-new member who arrived through an invite auto-joins; anyone else gets a one-tap "join this room?" card (`JoinInvite`).
+- Members always see each other's name, photo and headline (get_group_members does not look at is_visible); LinkedIn / Instagram only where that member shared them in that room.
+
+## Requests screen windows
+- Pending: 2 h. Active (links open): 48 h from the request. History: expired requests and links older than 48 h, loaded for 7 days (src/lib/requests.ts has the one definition of each window).
 
 ## Conventions
 - Profile links are stored canonical: `https://www.linkedin.com/in/<slug>` and a bare Instagram handle (DB check constraints enforce it). Always go through `normalizeLinkedIn` / `normalizeInstagram` on input and `safeProfileUrl` before putting a server value in an `<a href>` (src/lib/social.ts).

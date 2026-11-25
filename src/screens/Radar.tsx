@@ -8,6 +8,7 @@ import { BottomSheet } from '../components/BottomSheet';
 import { useConnectionLink } from '../hooks/useConnectionLink';
 import { FEW_PEOPLE, RADIUS_M } from '../hooks/useNearby';
 import { toast } from '../lib/notify';
+import { findRequest, requestFailureText } from '../lib/requests';
 import { inviteNearby, kindLabel } from '../lib/social';
 import type { GeoStatus } from '../hooks/usePresence';
 import type { Inbox } from '../hooks/useInbox';
@@ -24,25 +25,6 @@ interface Props {
   campusCount: number | null;
   inbox: Inbox;
   onOpenChat: (chatId: string) => void;
-}
-
-/** My live (accepted, or pending and not yet expired) request of this kind to that person. */
-function findRequest(requests: ConnectionRequest[], myId: string, userId: string, kind: RequestKind, now: number) {
-  return (
-    requests.find(
-      (x) =>
-        x.sender_id === myId && x.receiver_id === userId && x.kind === kind &&
-        (x.status === 'accepted' || (x.status === 'pending' && Date.parse(x.expires_at) > now)),
-    ) ?? null
-  );
-}
-
-/** Say WHY a request could not be sent. */
-function requestFailureText(error: string, name: string, kind: RequestKind) {
-  if (error.includes('chat already open')) return 'כבר יש ביניכם צ׳אט פתוח';
-  if (/no (linkedin|instagram)/.test(error)) return `${name} עדיין לא הוסיף/ה ${kindLabel[kind]}`;
-  if (error.includes('user unavailable')) return `${name} כבר לא זמין/ה`;
-  return 'לא הצלחנו לשלוח את הבקשה';
 }
 
 export function Radar({ myId, visible, onShow, geo, users, scanned, campusCount, inbox, onOpenChat }: Props) {
