@@ -47,6 +47,7 @@ export function Radar({ myId, visible, onShow, geo, users, campusCount, inbox, o
           <span className="rounded-full bg-card px-2.5 py-0.5 text-xs font-bold text-live shadow-sm">{users.length} לידך</span>
         )}
       </div>
+      {live && <p className="-mt-2 mb-3 px-1 text-center text-[11px] text-muted">השאר מיקום פעיל כדי שחברים בקמפוס יראו אותך</p>}
 
       {!visible ? (
         <StateCard

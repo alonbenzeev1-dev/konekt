@@ -85,7 +85,8 @@ export function useGroups(userId: string | null, activeGroupId: string | null) {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_messages' }, (payload) => {
         const msg = payload.new as GroupMessage;
         setMessages((prev) => (prev.some((x) => x.id === msg.id) ? prev : [...prev, msg]));
-        if (msg.sender_id === userId || activeRef.current === msg.group_id) return;
+        if (msg.sender_id === userId) return;
+        if (activeRef.current === msg.group_id && document.visibilityState === 'visible') return; // already reading it
         const g = groupsRef.current.find((x) => x.id === msg.group_id);
         const who = membersRef.current[msg.group_id]?.find((x) => x.member_id === msg.sender_id)?.first_name ?? 'מישהו';
         void alertIncoming(g?.name ?? 'קבוצה', `${who}: ${msg.content.slice(0, 80)}`, `gmsg-${msg.group_id}`);

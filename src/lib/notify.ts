@@ -26,8 +26,17 @@ export async function alertIncoming(title: string, body: string, tag: string) {
   }
   toast(`${title} · ${body}`, 'alert');
   if (document.visibilityState === 'hidden' && 'Notification' in window && Notification.permission === 'granted') {
+    const options = { body, tag, icon: '/icons/icon-192.png', dir: 'rtl', lang: 'he' } as const;
     const reg = await navigator.serviceWorker?.getRegistration();
-    reg?.showNotification(title, { body, tag, icon: '/icons/icon-192.png', dir: 'rtl', lang: 'he' });
+    if (reg) {
+      void reg.showNotification(title, options); // sw.js focuses / opens the app on click
+    } else {
+      const n = new Notification(title, options);
+      n.onclick = () => {
+        window.focus();
+        n.close();
+      };
+    }
   }
 }
 

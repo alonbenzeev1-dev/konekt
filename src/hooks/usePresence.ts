@@ -21,9 +21,13 @@ export function usePresence(userId: string | null, visible: boolean) {
   const latest = useRef<Coords | null>(null);
 
   useEffect(() => {
-    const onVis = () => setPageVisible(document.visibilityState === "visible");
+    const onVis = () => setPageVisible(document.visibilityState === 'visible');
     document.addEventListener('visibilitychange', onVis);
-    return () => document.removeEventListener('visibilitychange', onVis);
+    window.addEventListener('pageshow', onVis); // restored from the back/forward cache
+    return () => {
+      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('pageshow', onVis);
+    };
   }, []);
 
   useEffect(() => {
@@ -50,17 +54,23 @@ export function usePresence(userId: string | null, visible: boolean) {
       if (error) console.warn('presence write failed', error.message);
     };
 
-    const watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        const c = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy };
-        latest.current = c;
-        setCoords(c);
-        setStatus('ok');
-        void write(c);
-      },
-      (err) => setStatus(err.code === err.PERMISSION_DENIED ? 'denied' : 'unavailable'),
-      { enableHighAccuracy: true, maximumAge: 10_000, timeout: 30_000 },
-    );
+    const onPos = (pos: GeolocationPosition, force = false) => {
+      const c = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy };
+      latest.current = c;
+      setCoords(c);
+      setStatus('ok');
+      void write(c, force);
+    };
+    const onErr = (err: GeolocationPositionError) => setStatus(err.code === err.PERMISSION_DENIED ? 'denied' : 'unavailable');
+
+    // Opening / resuming the app: take a quick fix and force a write, so last_seen_at is fresh straight away
+    // (nearby results need a heartbeat from the last 5 minutes, and nothing runs while the page is hidden).
+    navigator.geolocation.getCurrentPosition((pos) => onPos(pos, true), onErr, { enableHighAccuracy: false, maximumAge: 60_000, timeout: 15_000 });
+    const watchId = navigator.geolocation.watchPosition((pos) => onPos(pos), onErr, {
+      enableHighAccuracy: true,
+      maximumAge: 10_000,
+      timeout: 30_000,
+    });
 
     const beat = setInterval(() => {
       if (latest.current) void write(latest.current, true);

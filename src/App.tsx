@@ -3,6 +3,8 @@ import { CircleHelp, Loader2 } from 'lucide-react';
 import { Wordmark } from './components/Logo';
 import { VisibilityToggle } from './components/VisibilityToggle';
 import { HowItWorksModal, hasSeenGuide, markGuideSeen } from './components/HowItWorksModal';
+import { InstallPwaBanner } from './components/InstallPwaBanner';
+import { NotificationBell } from './components/NotificationBell';
 import { TabBar, type Tab } from './components/TabBar';
 import { Toaster } from './components/Toaster';
 import { Welcome } from './screens/Welcome';
@@ -163,7 +165,8 @@ function Main({ profile, onProfile, onSignedOut }: { profile: MyProfile; onProfi
       <header className="sticky top-0 z-30 border-b border-line bg-card/90 px-4 pb-3 backdrop-blur-xl safe-top">
         <div className="flex items-center justify-between pt-1">
           <Wordmark className="text-[15px]" />
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
+            <NotificationBell userId={profile.id} />
             <button
               onClick={() => setGuideOpen(true)}
               aria-label="איך זה עובד?"
@@ -176,6 +179,8 @@ function Main({ profile, onProfile, onSignedOut }: { profile: MyProfile; onProfi
         </div>
         {titles[tab] && <h1 className="mt-3 text-xl font-extrabold text-ink">{titles[tab]}</h1>}
       </header>
+
+      <InstallPwaBanner />
 
       <main className="flex-1">
         {tab === 'radar' && (

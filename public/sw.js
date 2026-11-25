@@ -1,5 +1,5 @@
 /* KONEKT service worker — app-shell cache + Web Push */
-const CACHE = 'konekt-v2';
+const CACHE = 'konekt-v3'; // bumped: new icons are cache-first
 const SHELL = ['/', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon.svg'];
 
 self.addEventListener('install', (event) => {

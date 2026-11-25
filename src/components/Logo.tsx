@@ -12,7 +12,7 @@ export function Logo({ size = 28, pulse = true }: { size?: number; pulse?: boole
 
 export function Wordmark({ className = '' }: { className?: string }) {
   return (
-    <span dir="ltr" className={`inline-flex items-center gap-2 font-extrabold tracking-[0.16em] text-ink ${className}`}>
+    <span dir="ltr" className={`inline-flex items-center gap-1.5 font-extrabold tracking-[0.12em] text-ink ${className}`}>
       <KonektLogo className="h-7 w-7 shrink-0" />
       KONEKT
     </span>
