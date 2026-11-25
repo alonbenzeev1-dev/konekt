@@ -27,12 +27,12 @@ export function LinkFields(p: Props) {
             קישור לפרופיל LinkedIn <span className="font-normal text-muted">(חובה)</span>
           </span>
           <a
-            href="https://www.linkedin.com/in/me"
+            href="https://www.linkedin.com/public-profile/settings"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 rounded-full bg-[#0A66C2]/10 px-2.5 py-1 text-[11px] font-bold text-[#0A66C2] transition hover:bg-[#0A66C2]/20"
           >
-            פתח פרופיל להעתקה
+            מצא את הקישור שלי
             <ExternalLink size={11} />
           </a>
         </div>
@@ -59,6 +59,9 @@ export function LinkFields(p: Props) {
             </button>
           )}
         </div>
+        <p className="mt-1.5 text-[11px] leading-snug text-muted">
+          בטלפון? בפרופיל שלך בלינקדאין לחץ על <span className="font-bold text-ink">⋯ (עוד)</span> ← <span className="font-bold text-ink">שתף פרופיל</span> ← <span className="font-bold text-ink">העתק קישור</span>.
+        </p>
         {p.linkedinError && <span className="mt-1 block text-xs text-danger">הדביקו קישור בפורמט linkedin.com/in/השם-שלכם</span>}
       </div>
 
