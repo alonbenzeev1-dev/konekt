@@ -13,7 +13,7 @@ interface Props {
   onBack: () => void;
 }
 
-const ICEBREAKERS = ['היי! גם אתה בהרצאה עכשיו?', 'ראיתי אותך ברדאר, בא לך קפה בהפסקה?', 'נעים להכיר! באיזה חוג ושנה אתה?'];
+const ICEBREAKERS = ['היי! גם אתה בהרצאה עכשיו?', 'ראיתי אותך בסביבה, בא לך קפה בהפסקה?', 'נעים להכיר! באיזה חוג ושנה אתה?'];
 
 export function Chat({ myId, chatId, inbox, onBack }: Props) {
   const now = useNow(30_000);

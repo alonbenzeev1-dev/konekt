@@ -102,7 +102,7 @@ export function Profile({ profile, onProfile, visible, onToggle, onSignedOut }: 
         </label>
         <label className="mt-4 block">
           <span className="mb-1.5 flex items-center justify-between text-xs font-bold text-ink">
-            <span>שורת תיאור קצרה <span className="font-normal text-muted">(מופיעה ברדאר)</span></span>
+            <span>שורת תיאור קצרה <span className="font-normal text-muted">(מופיעה בסביבה)</span></span>
             <span className="font-normal tabular-nums text-muted">{headline.length}/60</span>
           </span>
           <input className="field" value={headline} maxLength={60} onChange={(e) => setHeadline(e.target.value)} placeholder="למשל: הנדסת תעשייה וניהול, שנה ג׳" />
@@ -118,7 +118,7 @@ export function Profile({ profile, onProfile, visible, onToggle, onSignedOut }: 
 
       <section className="card flex items-center justify-between gap-3 rounded-3xl p-5">
         <div>
-          <p className="font-bold text-ink">נראות ברדאר</p>
+          <p className="font-bold text-ink">נראות בסביבה</p>
           <p className="text-xs text-muted">{visible ? 'אנשים ברדיוס 75 מ׳ רואים אותך' : 'אף אחד לא רואה אותך כרגע'}</p>
         </div>
         <VisibilityToggle on={visible} onChange={onToggle} />

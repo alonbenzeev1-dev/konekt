@@ -1,10 +1,10 @@
-import { Radar, MessagesSquare, UserRound } from 'lucide-react';
+import { MapPin, MessagesSquare, UserRound } from 'lucide-react';
 
 export type Tab = 'radar' | 'inbox' | 'profile';
 
 export function TabBar({ tab, onTab, badge }: { tab: Tab; onTab: (t: Tab) => void; badge: number }) {
-  const items: { id: Tab; label: string; Icon: typeof Radar }[] = [
-    { id: 'radar', label: 'רדאר', Icon: Radar },
+  const items: { id: Tab; label: string; Icon: typeof MapPin }[] = [
+    { id: 'radar', label: 'סביבי', Icon: MapPin },
     { id: 'inbox', label: 'בקשות וצ׳אט', Icon: MessagesSquare },
     { id: 'profile', label: 'הפרופיל שלי', Icon: UserRound },
   ];

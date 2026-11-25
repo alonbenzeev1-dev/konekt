@@ -51,8 +51,8 @@ export function Radar({ myId, visible, onShow, geo, users, campusCount, inbox, o
         <StateCard
           icon={<EyeOff size={24} />}
           title="את/ה מוסתר/ת"
-          body="אף אחד לא רואה אותך ברדאר, וגם את/ה לא רואה אחרים. בקשות וצ׳אטים קיימים ממשיכים לעבוד."
-          action={<button onClick={onShow} className="btn-primary mt-4 px-6 py-3">להופיע ברדאר</button>}
+          body="אף אחד לא רואה אותך בסביבה, וגם את/ה לא רואה אחרים. בקשות וצ׳אטים קיימים ממשיכים לעבוד."
+          action={<button onClick={onShow} className="btn-primary mt-4 px-6 py-3">להופיע בסביבה</button>}
         />
       ) : geo === 'denied' ? (
         <StateCard
@@ -129,12 +129,12 @@ function EmptyRadar({ campusCount }: { campusCount: number | null }) {
       <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-live-soft text-live">
         <Users size={22} />
       </div>
-      <h3 className="text-base font-bold text-ink">אף אחד לידך עוד לא פתח את הרדאר</h3>
+      <h3 className="text-base font-bold text-ink">אף אחד לידך עוד לא פתח את KONEKT</h3>
       <p className="mt-1.5 text-sm leading-relaxed text-muted">
         {campusCount != null && campusCount > 0
           ? `${campusCount} פעילים עכשיו בקמפוס, ברדיוס ${CAMPUS_RADIUS_M / 1000} ק״מ ממך. `
           : ''}
-        הרדאר עובד כשחברים פותחים אותו. תזמינו את מי שיושב לידכם ותתחברו.
+        הסביבה מתמלאת כשחברים פותחים את האפליקציה. תזמינו את מי שיושב לידכם ותתחברו.
       </p>
       <button
         onClick={() => void inviteNearby(toast)}

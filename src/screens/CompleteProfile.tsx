@@ -115,7 +115,7 @@ export function CompleteProfile({ uid, initialName, linkedinPicture, onDone }: P
           </label>
           <label className="block">
             <span className="mb-1.5 flex items-center justify-between text-xs font-bold text-ink">
-              <span>שורת תיאור קצרה <span className="font-normal text-muted">(מופיעה ברדאר)</span></span>
+              <span>שורת תיאור קצרה <span className="font-normal text-muted">(מופיעה בסביבה)</span></span>
               <span className="font-normal text-muted tabular-nums">{headline.length}/60</span>
             </span>
             <input className="field" maxLength={60} value={headline} onChange={(e) => setHeadline(e.target.value)} placeholder="למשל: מדעי המחשב, שנה ב׳" />

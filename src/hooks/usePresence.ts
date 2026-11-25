@@ -10,7 +10,7 @@ const MIN_WRITE_MS = 20_000;   // …or this much time passed
 const HEARTBEAT_MS = 60_000;   // keep last_seen_at fresh (radar presence expires after 10 min)
 
 /**
- * GPS watcher + presence writer. Runs only while `visible` (נראה ברדאר)
+ * GPS watcher + presence writer. Runs only while `visible` (גלוי בסביבה)
  * and the tab is visible — "discoverable whenever the app is open".
  */
 export function usePresence(userId: string | null, visible: boolean) {

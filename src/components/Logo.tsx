@@ -11,7 +11,7 @@ export function Logo({ size = 28, pulse = true }: { size?: number; pulse?: boole
 export function Wordmark({ className = '' }: { className?: string }) {
   return (
     <span dir="ltr" className={`inline-flex items-center gap-2 font-extrabold tracking-[0.16em] text-ink ${className}`}>
-      <Logo size={22} />
+      <img src="/icons/icon.svg" alt="" width={26} height={26} className="h-[26px] w-[26px] shrink-0 object-contain" draggable={false} />
       KONEKT
     </span>
   );

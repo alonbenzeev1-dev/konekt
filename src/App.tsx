@@ -124,7 +124,7 @@ function Main({ profile, onProfile, onSignedOut }: { profile: MyProfile; onProfi
       try { navigator.vibrate?.(25); } catch { /* noop */ }
       try {
         await setVisible(profile.id, on);
-        toast(on ? 'נראה ברדאר — אנשים סביבך רואים אותך' : 'מוסתר — אף אחד לא רואה אותך', on ? 'success' : 'info');
+        toast(on ? 'גלוי בסביבה — אנשים לידך רואים אותך' : 'מוסתר — אף אחד לא רואה אותך', on ? 'success' : 'info');
       } catch {
         onProfile(prev);
         toast('לא הצלחנו לעדכן', 'error');

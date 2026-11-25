@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Linkedin, Loader2, Lock, Radar, UserCheck } from 'lucide-react';
+import { Linkedin, Loader2, Lock, MapPin, UserCheck } from 'lucide-react';
 import { Logo } from '../components/Logo';
 import { signInWithLinkedIn } from '../lib/supabase';
 import { toast } from '../lib/notify';
@@ -18,7 +18,7 @@ export function Welcome() {
   };
 
   const points = [
-    { Icon: Radar, text: 'רואים מי נמצא עד 75 מטר ממך, עכשיו' },
+    { Icon: MapPin, text: 'רואים מי נמצא עד 75 מטר ממך, עכשיו' },
     { Icon: UserCheck, text: 'כל חיבור וצ׳אט רק באישור של שני הצדדים' },
     { Icon: Lock, text: 'הקישורים שלך נעולים עד שתאשרו' },
   ];
