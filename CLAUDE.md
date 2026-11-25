@@ -13,6 +13,7 @@ Commands: `npm run dev`, `npm run build` (`tsc -b && vite build`; must be clean 
 - `src/lib/` supabase client, types, social helpers, profile helpers
 - `supabase_schema.sql` full schema, RLS and RPCs (paste into SQL Editor; safe to re-run)
 - `supabase/migrations/private_groups.sql` private groups (groups, group_members, group_messages + RPCs); apply after the main schema
+- `supabase/migrations/campus_tags.sql` profiles.tags (max 3) + get_nearby_users returning tags
 - `supabase/functions/` import-avatar, push
 
 ## Request logic (one-way, 48h)

@@ -8,6 +8,8 @@ export interface MyProfile {
   avatar_url: string | null;
   linkedin_url: string | null;
   instagram_handle: string | null;
+  /** Quick campus tags (profiles.tags). Missing until the campus_tags migration is applied. */
+  tags?: string[];
   is_visible: boolean;
   lat: number | null;
   lng: number | null;
@@ -23,6 +25,7 @@ export interface PublicProfile {
 }
 
 export interface NearbyUser extends PublicProfile {
+  tags?: string[];
   has_linkedin: boolean;
   has_instagram: boolean;
   distance_m: number;

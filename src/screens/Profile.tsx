@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Loader2, LogOut, MessageSquareHeart, Star, Trash2 } from 'lucide-react';
 import { PhotoPicker } from '../components/PhotoPicker';
 import { LinkFields } from '../components/LinkFields';
+import { CAMPUS_TAGS, MAX_TAGS } from '../lib/tags';
 import { VisibilityToggle } from '../components/VisibilityToggle';
 import { supabase } from '../lib/supabase';
 import { toast } from '../lib/notify';
@@ -22,6 +23,7 @@ export function Profile({ profile, onProfile, visible, onToggle, onSignedOut }: 
   const [headline, setHeadline] = useState(profile.headline ?? '');
   const [linkedin, setLinkedin] = useState(profile.linkedin_url ?? '');
   const [instagram, setInstagram] = useState(profile.instagram_handle ?? '');
+  const [tags, setTags] = useState<string[]>(profile.tags ?? []);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -29,7 +31,12 @@ export function Profile({ profile, onProfile, visible, onToggle, onSignedOut }: 
   const igNorm = instagram.trim() ? normalizeInstagram(instagram) : null;
   const liBad = !liNorm;
   const igBad = !!instagram.trim() && !igNorm;
+  const tagsKey = (t: string[]) => [...t].sort().join('|');
+  const tagsChanged = tagsKey(tags) !== tagsKey(profile.tags ?? []);
+  const toggleTag = (t: string) =>
+    setTags((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : prev.length < MAX_TAGS ? [...prev, t] : prev));
   const dirty =
+    tagsChanged ||
     name.trim() !== profile.first_name ||
     (headline.trim() || null) !== profile.headline ||
     liNorm !== profile.linkedin_url ||
@@ -62,6 +69,8 @@ export function Profile({ profile, onProfile, visible, onToggle, onSignedOut }: 
         headline: headline.trim().slice(0, 60) || null,
         linkedin_url: liNorm,
         instagram_handle: igNorm,
+        // only sent when edited, so saving still works before the tags migration is applied
+        ...(tagsChanged ? { tags } : {}),
       });
       onProfile(p);
       toast('נשמר', 'success');
@@ -107,6 +116,32 @@ export function Profile({ profile, onProfile, visible, onToggle, onSignedOut }: 
           </span>
           <input className="field" value={headline} maxLength={60} onChange={(e) => setHeadline(e.target.value)} placeholder="למשל: הנדסת תעשייה וניהול, שנה ג׳" />
         </label>
+        <div className="mt-4">
+          <span className="mb-1.5 flex items-center justify-between text-xs font-bold text-ink">
+            <span>תגיות <span className="font-normal text-muted">(מופיעות בכרטיס שלך, עד {MAX_TAGS})</span></span>
+            <span className="font-normal tabular-nums text-muted">{tags.length}/{MAX_TAGS}</span>
+          </span>
+          <div className="flex flex-wrap gap-1.5">
+            {CAMPUS_TAGS.map((t) => {
+              const on = tags.includes(t);
+              const locked = !on && tags.length >= MAX_TAGS;
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  aria-pressed={on}
+                  disabled={locked}
+                  onClick={() => toggleTag(t)}
+                  className={`rounded-full border px-3 py-1.5 text-[13px] font-semibold transition-colors disabled:opacity-40 ${
+                    on ? 'border-primary bg-primary text-white' : 'border-line bg-card text-ink'
+                  }`}
+                >
+                  {t}
+                </button>
+              );
+            })}
+          </div>
+        </div>
         <div className="mt-4">
           <LinkFields linkedin={linkedin} onLinkedin={setLinkedin} instagram={instagram} onInstagram={setInstagram} linkedinError={liBad} instagramError={igBad} />
         </div>

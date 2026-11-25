@@ -5,6 +5,8 @@ import type { Group, GroupMember, GroupMessage } from '../lib/types';
 
 type Result = { error: string | null };
 
+export const MAX_GROUP_MEMBERS = 30;
+
 export interface GroupSummary {
   group: Group;
   last: GroupMessage | null;
@@ -50,6 +52,7 @@ export function useGroups(userId: string | null, activeGroupId: string | null) {
     void load();
   }, [load]);
 
+  // Realtime may drop while the phone sleeps, and leaves are not pushed → reload on foreground.
   useEffect(() => {
     const onVis = () => { if (document.visibilityState === 'visible') void load(); };
     document.addEventListener('visibilitychange', onVis);
@@ -58,22 +61,27 @@ export function useGroups(userId: string | null, activeGroupId: string | null) {
 
   useEffect(() => {
     if (!userId) return;
+
+    const onMemberChange = async (payload: { eventType: string; new: unknown }) => {
+      const row = payload.new as Partial<{ group_id: string; user_id: string }>;
+      if (!row.group_id) return;
+      if (payload.eventType === 'INSERT' && row.user_id === userId) {
+        const known = groupsRef.current.some((g) => g.id === row.group_id);
+        await load();
+        if (!known && !createdByMe.current.has(row.group_id)) {
+          const name = groupsRef.current.find((g) => g.id === row.group_id)?.name;
+          void alertIncoming('קבוצה חדשה', name ? `הוספו אותך ל"${name}"` : 'הוספו אותך לקבוצה', `grp-${row.group_id}`);
+        }
+      } else {
+        void loadMembers(row.group_id);
+      }
+    };
+
     const channel = supabase
       .channel(`groups:${userId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'group_members' }, async (payload) => {
-        const row = (payload.new ?? payload.old) as Partial<{ group_id: string; user_id: string }>;
-        if (!row.group_id) return;
-        if (payload.eventType === 'INSERT' && row.user_id === userId) {
-          const known = groupsRef.current.some((g) => g.id === row.group_id);
-          await load();
-          if (!known && !createdByMe.current.has(row.group_id)) {
-            const name = groupsRef.current.find((g) => g.id === row.group_id)?.name;
-            void alertIncoming('קבוצה חדשה', name ? `הוספו אותך ל"${name}"` : 'הוספו אותך לקבוצה', `grp-${row.group_id}`);
-          }
-        } else {
-          void loadMembers(row.group_id);
-        }
-      })
+      // INSERT/UPDATE only: Realtime does not apply RLS to DELETE events, so leaves are picked up on open/refocus instead.
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_members' }, (p) => void onMemberChange(p))
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'group_members' }, (p) => void onMemberChange(p))
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_messages' }, (payload) => {
         const msg = payload.new as GroupMessage;
         setMessages((prev) => (prev.some((x) => x.id === msg.id) ? prev : [...prev, msg]));
@@ -100,6 +108,31 @@ export function useGroups(userId: string | null, activeGroupId: string | null) {
     },
     [loadMembers],
   );
+
+  /** Any member can add connections / people nearby (server enforces eligibility and the 30 cap). */
+  const addMembers = useCallback(
+    async (groupId: string, memberIds: string[]): Promise<Result> => {
+      const { error } = await supabase.rpc('add_group_members', { grp: groupId, member_ids: memberIds });
+      if (error) return { error: error.message };
+      await loadMembers(groupId);
+      return { error: null };
+    },
+    [loadMembers],
+  );
+
+  /** "עזוב קבוצה" — drops the group and its messages from this device once the server confirms. */
+  const leave = useCallback(async (groupId: string): Promise<Result> => {
+    const { error } = await supabase.rpc('leave_group', { grp: groupId });
+    if (error) return { error: error.message };
+    setGroups((prev) => prev.filter((g) => g.id !== groupId));
+    setMessages((prev) => prev.filter((m) => m.group_id !== groupId));
+    setMembers((prev) => {
+      const next = { ...prev };
+      delete next[groupId];
+      return next;
+    });
+    return { error: null };
+  }, []);
 
   const sendMessage = useCallback(async (groupId: string, content: string): Promise<Result> => {
     const text = content.trim().slice(0, 1000);
@@ -148,7 +181,7 @@ export function useGroups(userId: string | null, activeGroupId: string | null) {
     [groups, messages],
   );
 
-  return { groups, summaries, members, messages, create, sendMessage, setShare };
+  return { groups, summaries, members, messages, create, addMembers, leave, sendMessage, setShare, refreshMembers: loadMembers };
 }
 
 export type GroupsData = ReturnType<typeof useGroups>;

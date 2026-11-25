@@ -1,22 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, Check, Instagram, Linkedin, SendHorizontal, Users } from 'lucide-react';
+import { ArrowRight, Check, Instagram, Linkedin, LogOut, SendHorizontal, UserPlus, Users } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
 import { BottomSheet } from '../components/BottomSheet';
+import { AddMembersSheet, type GroupCandidate } from '../components/CreateGroupSheet';
 import { toast } from '../lib/notify';
 import { formatClock } from '../lib/time';
-import type { GroupsData } from '../hooks/useGroups';
+import { MAX_GROUP_MEMBERS, type GroupsData } from '../hooks/useGroups';
 
 interface Props {
   myId: string;
   groupId: string;
   groups: GroupsData;
+  /** Connections + people nearby, for "הוסף משתתף". */
+  candidates: GroupCandidate[];
   onBack: () => void;
 }
 
-export function GroupChat({ myId, groupId, groups, onBack }: Props) {
+export function GroupChat({ myId, groupId, groups, candidates, onBack }: Props) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
   const group = groups.groups.find((g) => g.id === groupId);
@@ -25,6 +30,28 @@ export function GroupChat({ myId, groupId, groups, onBack }: Props) {
   const sharing = !!me?.share_socials;
   const byId = useMemo(() => new Map(members.map((m) => [m.member_id, m])), [members]);
   const msgs = useMemo(() => groups.messages.filter((m) => m.group_id === groupId), [groups.messages, groupId]);
+  const slots = Math.max(0, MAX_GROUP_MEMBERS - members.length);
+  const addable = useMemo(() => {
+    const inGroup = new Set(members.map((m) => m.member_id));
+    return candidates.filter((c) => !inGroup.has(c.id));
+  }, [members, candidates]);
+
+  const { refreshMembers } = groups;
+  const openMembers = () => {
+    setShowMembers(true);
+    void refreshMembers(groupId); // picks up people who left or joined since the last refresh
+  };
+
+  const leave = async () => {
+    if (leaving || !group || !window.confirm(`לעזוב את "${group.name}"? לא תראו יותר את ההודעות בקבוצה.`)) return;
+    setLeaving(true);
+    const { error } = await groups.leave(groupId);
+    setLeaving(false);
+    if (error) return toast('לא הצלחנו לעזוב את הקבוצה', 'error');
+    toast(`עזבת את "${group.name}"`, 'info');
+    setShowMembers(false);
+    history.back(); // popstate → back to the Inbox
+  };
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -64,7 +91,7 @@ export function GroupChat({ myId, groupId, groups, onBack }: Props) {
           <button onClick={() => history.back()} className="rounded-full p-2 text-ink active:bg-bg" aria-label="חזרה">
             <ArrowRight size={22} />
           </button>
-          <button onClick={() => setShowMembers(true)} className="flex min-w-0 flex-1 items-center gap-3 text-start">
+          <button onClick={openMembers} className="flex min-w-0 flex-1 items-center gap-3 text-start">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-soft text-primary">
               <Users size={20} />
             </span>
@@ -194,7 +221,32 @@ export function GroupChat({ myId, groupId, groups, onBack }: Props) {
           ))}
         </ul>
         <p className="mt-3 text-center text-[11px] text-muted">קישורים מופיעים רק אצל מי ששיתף אותם בקבוצה הזו.</p>
+
+        <button
+          onClick={() => setAdding(true)}
+          disabled={slots === 0}
+          className="btn-primary mt-4 flex w-full items-center justify-center gap-2 py-3 disabled:opacity-50"
+        >
+          <UserPlus size={18} />
+          {slots === 0 ? 'הקבוצה מלאה (30)' : 'הוסף משתתף'}
+        </button>
+        <button
+          onClick={leave}
+          disabled={leaving}
+          className="mx-auto mt-3 flex items-center gap-1.5 py-1.5 text-sm font-bold text-danger disabled:opacity-50"
+        >
+          <LogOut size={15} className="-scale-x-100" />
+          עזוב קבוצה
+        </button>
       </BottomSheet>
+
+      <AddMembersSheet
+        open={adding}
+        onClose={() => setAdding(false)}
+        candidates={addable}
+        slots={slots}
+        onAdd={(ids) => groups.addMembers(groupId, ids)}
+      />
     </div>
   );
 }

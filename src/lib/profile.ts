@@ -54,6 +54,7 @@ export interface ProfileInput {
   headline: string | null;
   linkedin_url: string | null;
   instagram_handle: string | null;
+  tags?: string[];
   avatar_url?: string | null;
   is_visible?: boolean;
   lat?: number;

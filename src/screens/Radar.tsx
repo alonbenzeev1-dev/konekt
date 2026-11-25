@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { ArrowUpLeft, Check, Clock, EyeOff, Instagram, Linkedin, Loader2, MapPinOff, MessageCircle, Send, UserPlus, Users, ChevronLeft } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
+import { TagChips } from '../components/TagChips';
 import { BottomSheet } from '../components/BottomSheet';
 import { useConnectionLink } from '../hooks/useConnectionLink';
 import { CAMPUS_RADIUS_M, FEW_PEOPLE, RADIUS_M } from '../hooks/useNearby';
@@ -82,6 +83,7 @@ export function Radar({ myId, visible, onShow, geo, users, campusCount, inbox, o
                         <span className="h-1.5 w-1.5 rounded-full bg-primary" />
                         {proximityLabel(u.distance_m)}
                       </span>
+                      <TagChips tags={u.tags} className="mt-1.5" />
                     </span>
                     <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-cta px-3 py-1.5 text-sm font-bold text-white">
                       התחבר
@@ -206,6 +208,7 @@ function PersonSheet({
         <Avatar url={user.avatar_url} name={user.first_name} size={92} ring live />
         <h3 className="mt-3 text-2xl font-extrabold text-ink">{user.first_name}</h3>
         {user.headline && <p className="mt-0.5 max-w-[300px] text-sm text-muted">{user.headline}</p>}
+        <TagChips tags={user.tags} className="mt-2 justify-center" />
         <p className="mt-1 text-xs font-bold text-primary">~{user.distance_m} מטר ממך</p>
       </div>
 

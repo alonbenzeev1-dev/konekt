@@ -88,6 +88,31 @@ grant update (share_socials) on public.group_members to authenticated;
 drop function if exists public.create_group(text, uuid[]);
 drop function if exists public.send_group_message(uuid, text);
 drop function if exists public.get_group_members(uuid);
+drop function if exists public.add_group_members(uuid, uuid[]);
+drop function if exists public.leave_group(uuid);
+
+-- Who may be put in a group by user "uid": a connection (an approved request
+-- either way) or someone visible within 150 m right now; never a blocked user.
+create or replace function private.can_group_add(uid uuid, m uuid)
+returns boolean
+language sql stable security definer set search_path = public
+as $$
+  select exists (select 1 from public.profiles where id = m)
+     and not private.is_blocked(uid, m)
+     and (
+       exists (select 1 from public.connection_requests r
+               where r.status = 'accepted'
+                 and ((r.sender_id = uid and r.receiver_id = m)
+                   or (r.sender_id = m and r.receiver_id = uid)))
+       or exists (select 1 from public.profiles me, public.profiles p
+                  where me.id = uid and p.id = m
+                    and me.is_visible and me.lat is not null and me.last_seen_at > now() - interval '5 minutes'
+                    and p.is_visible  and p.lat  is not null and p.last_seen_at  > now() - interval '10 minutes'
+                    and public.konekt_distance(me.lat, me.lng, p.lat, p.lng) <= 150)
+     );
+$$;
+revoke all on function private.can_group_add(uuid, uuid) from public, anon;
+grant execute on function private.can_group_add(uuid, uuid) to authenticated;
 
 -- create_group — creator + initial members. Every added person must be a
 -- connection (an approved request either way) or visible and within 150 m
@@ -97,7 +122,6 @@ returns public.groups
 language plpgsql volatile security definer set search_path = public
 as $$
 declare
-  me  public.profiles;
   g   public.groups;
   nm  text := btrim(coalesce(group_name, ''));
   ids uuid[];
@@ -105,31 +129,14 @@ declare
 begin
   if auth.uid() is null then raise exception 'not authenticated'; end if;
   if char_length(nm) not between 1 and 40 then raise exception 'bad name'; end if;
-  select * into me from public.profiles where id = auth.uid();
-  if me.id is null then raise exception 'no profile'; end if;
+  if not exists (select 1 from public.profiles where id = auth.uid()) then raise exception 'no profile'; end if;
 
   select coalesce(array_agg(distinct x), '{}') into ids
     from unnest(coalesce(member_ids, '{}')) as x where x <> auth.uid();
   if cardinality(ids) > 29 then raise exception 'too many members'; end if;
 
   foreach m in array ids loop
-    if private.is_blocked(auth.uid(), m) or not exists (select 1 from public.profiles where id = m) then
-      raise exception 'user unavailable';
-    end if;
-    if not (
-      exists (select 1 from public.connection_requests r
-              where r.status = 'accepted'
-                and ((r.sender_id = auth.uid() and r.receiver_id = m)
-                  or (r.sender_id = m and r.receiver_id = auth.uid())))
-      or exists (select 1 from public.profiles p
-                 where p.id = m and p.is_visible and p.lat is not null
-                   and p.last_seen_at > now() - interval '10 minutes'
-                   and me.is_visible and me.lat is not null
-                   and me.last_seen_at > now() - interval '5 minutes'
-                   and public.konekt_distance(me.lat, me.lng, p.lat, p.lng) <= 150)
-    ) then
-      raise exception 'user unavailable';
-    end if;
+    if not private.can_group_add(auth.uid(), m) then raise exception 'user unavailable'; end if;
   end loop;
 
   insert into public.groups (name, created_by) values (nm, auth.uid()) returning * into g;
@@ -184,12 +191,63 @@ as $$
   order by gm.joined_at, p.first_name;
 $$;
 
+-- add_group_members — any member can add connections / people nearby, up to
+-- 30 in total. Returns how many were actually added (people already in are skipped).
+create function public.add_group_members(grp uuid, member_ids uuid[])
+returns integer
+language plpgsql volatile security definer set search_path = public
+as $$
+declare
+  ids uuid[];
+  m   uuid;
+  cnt int;
+begin
+  if auth.uid() is null then raise exception 'not authenticated'; end if;
+  if not private.is_group_member(grp, auth.uid()) then raise exception 'group not available'; end if;
+  perform 1 from public.groups where id = grp for update;  -- serialize concurrent adds so the cap holds
+
+  select coalesce(array_agg(distinct x), '{}') into ids
+    from unnest(coalesce(member_ids, '{}')) as x
+   where not exists (select 1 from public.group_members gm where gm.group_id = grp and gm.user_id = x);
+  if cardinality(ids) = 0 then return 0; end if;
+
+  select count(*) into cnt from public.group_members where group_id = grp;
+  if cnt + cardinality(ids) > 30 then raise exception 'too many members'; end if;
+
+  foreach m in array ids loop
+    if not private.can_group_add(auth.uid(), m) then raise exception 'user unavailable'; end if;
+  end loop;
+
+  insert into public.group_members (group_id, user_id) select grp, x from unnest(ids) as x;
+  return cardinality(ids);
+end;
+$$;
+
+-- leave_group — remove myself. The last member out deletes the group (and its messages).
+create function public.leave_group(grp uuid)
+returns void
+language plpgsql volatile security definer set search_path = public
+as $$
+begin
+  if auth.uid() is null then raise exception 'not authenticated'; end if;
+  delete from public.group_members where group_id = grp and user_id = auth.uid();
+  if not found then return; end if;
+  if not exists (select 1 from public.group_members where group_id = grp) then
+    delete from public.groups where id = grp;
+  end if;
+end;
+$$;
+
 revoke all on function public.create_group(text, uuid[])    from public, anon;
 revoke all on function public.send_group_message(uuid, text) from public, anon;
 revoke all on function public.get_group_members(uuid)        from public, anon;
+revoke all on function public.add_group_members(uuid, uuid[]) from public, anon;
+revoke all on function public.leave_group(uuid)               from public, anon;
 grant execute on function public.create_group(text, uuid[])    to authenticated;
 grant execute on function public.send_group_message(uuid, text) to authenticated;
 grant execute on function public.get_group_members(uuid)        to authenticated;
+grant execute on function public.add_group_members(uuid, uuid[]) to authenticated;
+grant execute on function public.leave_group(uuid)               to authenticated;
 
 -- ---------------------------------------------------------------------
 -- 5. Realtime

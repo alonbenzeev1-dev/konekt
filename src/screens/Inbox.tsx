@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { ArrowUpLeft, Check, Clock, EyeOff, Hourglass, Instagram, Linkedin, Loader2, MessageCircle, Plus, Users } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
 import { CreateGroupSheet, type GroupCandidate } from '../components/CreateGroupSheet';
@@ -9,38 +9,21 @@ import { kindLabel } from '../lib/social';
 import { formatClock, formatCountdown, formatHoursLeft, msLeft } from '../lib/time';
 import type { Inbox as InboxData } from '../hooks/useInbox';
 import type { GroupsData } from '../hooks/useGroups';
-import type { ConnectionRequest, NearbyUser, PublicProfile, RequestKind } from '../lib/types';
+import type { ConnectionRequest, PublicProfile, RequestKind } from '../lib/types';
 
 interface Props {
   myId: string;
   inbox: InboxData;
   groups: GroupsData;
-  nearby: NearbyUser[];
+  candidates: GroupCandidate[];
   onOpenChat: (chatId: string) => void;
   onOpenGroup: (groupId: string) => void;
 }
 
-export function Inbox({ myId, inbox, groups, nearby, onOpenChat, onOpenGroup }: Props) {
+export function Inbox({ myId, inbox, groups, candidates, onOpenChat, onOpenGroup }: Props) {
   const now = useNow(1000);
   const [creating, setCreating] = useState(false);
   const { requests, threads, people } = inbox;
-
-  // Who can be added to a group: people I'm connected to, plus visible people near me right now.
-  const candidates = useMemo<GroupCandidate[]>(() => {
-    const out = new Map<string, GroupCandidate>();
-    const connected = [
-      ...requests.filter((r) => r.status === 'accepted').map((r) => (r.sender_id === myId ? r.receiver_id : r.sender_id)),
-      ...threads.map((t) => t.partnerId),
-    ];
-    for (const id of connected) {
-      const p = people[id];
-      if (p && !out.has(id)) out.set(id, { id, first_name: p.first_name, headline: p.headline, avatar_url: p.avatar_url, source: 'connection' });
-    }
-    for (const u of nearby) {
-      if (!out.has(u.id)) out.set(u.id, { id: u.id, first_name: u.first_name, headline: u.headline, avatar_url: u.avatar_url, source: 'nearby' });
-    }
-    return [...out.values()];
-  }, [requests, threads, people, nearby, myId]);
 
   const createGroup = async (name: string, ids: string[]) => {
     const { error, id } = await groups.create(name, ids);

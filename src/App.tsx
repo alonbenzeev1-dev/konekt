@@ -16,6 +16,7 @@ import { usePresence } from './hooks/usePresence';
 import { useNearby } from './hooks/useNearby';
 import { useInbox } from './hooks/useInbox';
 import { useGroups } from './hooks/useGroups';
+import { useGroupCandidates } from './hooks/useGroupCandidates';
 import { useNow } from './hooks/useNow';
 import { isConfigured, linkedInIdentity, supabase } from './lib/supabase';
 import { fetchMyProfile, setVisible } from './lib/profile';
@@ -115,6 +116,7 @@ function Main({ profile, onProfile, onSignedOut }: { profile: MyProfile; onProfi
   const { users, campusCount } = useNearby(coords, visible);
   const inbox = useInbox(profile.id);
   const groups = useGroups(profile.id, groupId);
+  const candidates = useGroupCandidates(profile.id, inbox, visible ? users : []);
   const now = useNow(15_000);
 
   useEffect(() => {
@@ -170,7 +172,7 @@ function Main({ profile, onProfile, onSignedOut }: { profile: MyProfile; onProfi
             onOpenChat={setChatId}
           />
         )}
-        {tab === 'inbox' && <Inbox myId={profile.id} inbox={inbox} groups={groups} nearby={visible ? users : []} onOpenChat={setChatId} onOpenGroup={setGroupId} />}
+        {tab === 'inbox' && <Inbox myId={profile.id} inbox={inbox} groups={groups} candidates={candidates} onOpenChat={setChatId} onOpenGroup={setGroupId} />}
         {tab === 'profile' && (
           <Profile profile={profile} onProfile={onProfile} visible={visible} onToggle={toggle} onSignedOut={onSignedOut} />
         )}
@@ -179,7 +181,7 @@ function Main({ profile, onProfile, onSignedOut }: { profile: MyProfile; onProfi
       <TabBar tab={tab} onTab={setTab} badge={badge} />
 
       {chatId && <Chat myId={profile.id} chatId={chatId} inbox={inbox} onBack={() => setChatId(null)} />}
-      {groupId && <GroupChat myId={profile.id} groupId={groupId} groups={groups} onBack={() => setGroupId(null)} />}
+      {groupId && <GroupChat myId={profile.id} groupId={groupId} groups={groups} candidates={candidates} onBack={() => setGroupId(null)} />}
     </>
   );
 }
