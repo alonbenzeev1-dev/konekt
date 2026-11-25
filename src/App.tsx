@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CircleHelp, Loader2 } from 'lucide-react';
 import { Wordmark } from './components/Logo';
 import { VisibilityToggle } from './components/VisibilityToggle';
-import { HowItWorksModal, hasSeenGuide, markGuideSeen } from './components/HowItWorksModal';
+import { HowItWorksModal } from './components/HowItWorksModal';
 import { InstallPwaBanner } from './components/InstallPwaBanner';
 import { NotificationBell } from './components/NotificationBell';
 import { TabBar, type Tab } from './components/TabBar';
@@ -21,6 +21,7 @@ import { useNearby } from './hooks/useNearby';
 import { useInbox } from './hooks/useInbox';
 import { useGroups } from './hooks/useGroups';
 import { useGroupCandidates } from './hooks/useGroupCandidates';
+import { useGuide } from './hooks/useGuide';
 import { useNow } from './hooks/useNow';
 import { isConfigured, linkedInIdentity, supabase } from './lib/supabase';
 import { fetchMyProfile, setVisible } from './lib/profile';
@@ -115,13 +116,8 @@ function Main({ profile, onProfile, onSignedOut }: { profile: MyProfile; onProfi
   const [tab, setTab] = useState<Tab>(initialTab);
   const [chatId, setChatId] = useState<string | null>(null);
   const [groupId, setGroupId] = useState<string | null>(null);
-  const [guideOpen, setGuideOpen] = useState(() => !hasSeenGuide()); // first time in the app
+  const guide = useGuide(profile, onProfile); // first time in the app, remembered on the profile
   const visible = profile.is_visible;
-
-  const closeGuide = useCallback(() => {
-    markGuideSeen();
-    setGuideOpen(false);
-  }, []);
 
   const { coords, status: geo } = usePresence(profile.id, visible);
   const { users, campusCount } = useNearby(coords, visible);
@@ -168,7 +164,7 @@ function Main({ profile, onProfile, onSignedOut }: { profile: MyProfile; onProfi
           <div className="flex items-center gap-1">
             <NotificationBell userId={profile.id} />
             <button
-              onClick={() => setGuideOpen(true)}
+              onClick={guide.show}
               aria-label="איך זה עובד?"
               className="flex h-8 w-8 items-center justify-center rounded-full text-muted transition-colors active:bg-bg"
             >
@@ -206,7 +202,7 @@ function Main({ profile, onProfile, onSignedOut }: { profile: MyProfile; onProfi
 
       <TabBar tab={tab} onTab={setTab} badges={badges} />
 
-      <HowItWorksModal open={guideOpen} onClose={closeGuide} />
+      <HowItWorksModal open={guide.open} onClose={guide.close} />
 
       {chatId && <Chat myId={profile.id} chatId={chatId} inbox={inbox} onBack={() => setChatId(null)} />}
       {groupId && <GroupChat myId={profile.id} groupId={groupId} groups={groups} candidates={candidates} onBack={() => setGroupId(null)} />}

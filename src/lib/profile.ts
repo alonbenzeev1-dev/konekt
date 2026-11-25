@@ -71,6 +71,12 @@ export async function upsertProfile(uid: string, input: ProfileInput): Promise<M
   return data as MyProfile;
 }
 
+/** Remember on the server that the walkthrough was seen. Best effort: localStorage still has it if this fails. */
+export async function markGuideSeenRemote(uid: string): Promise<void> {
+  const { error } = await supabase.from('profiles').update({ has_seen_guide: true }).eq('id', uid);
+  if (error) console.warn('has_seen_guide not saved', error.message);
+}
+
 export async function setVisible(uid: string, is_visible: boolean) {
   const { error } = await supabase
     .from('profiles')

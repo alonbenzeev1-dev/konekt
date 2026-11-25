@@ -10,6 +10,8 @@ export interface MyProfile {
   instagram_handle: string | null;
   /** Quick campus tags (profiles.tags). Missing until the campus_tags migration is applied. */
   tags?: string[];
+  /** Server-side "saw the walkthrough" flag. Missing until the has_seen_guide migration is applied. */
+  has_seen_guide?: boolean;
   is_visible: boolean;
   lat: number | null;
   lng: number | null;

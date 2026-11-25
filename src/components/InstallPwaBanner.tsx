@@ -101,16 +101,18 @@ export function InstallPwaBanner() {
         </button>
       ) : (
         <ol className="mt-3 space-y-1.5 rounded-xl bg-card px-3 py-2.5 text-[13px] leading-snug text-ink">
-          <li className="flex items-center gap-2">
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-extrabold text-white">1</span>
-            <span className="flex flex-wrap items-center gap-1">
-              לחץ על שתף <Share size={15} className="text-[#0A66C2]" /> למטה
+          <li className="flex items-start gap-2">
+            <span className="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-extrabold text-white">1</span>
+            <span className="min-w-0">
+              לחצו על כפתור השיתוף (הריבוע עם החץ למעלה){' '}
+              <Share size={15} className="inline align-text-bottom text-[#0A66C2]" /> בסרגל הדפדפן
             </span>
           </li>
-          <li className="flex items-center gap-2">
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-extrabold text-white">2</span>
-            <span className="flex flex-wrap items-center gap-1">
-              בחר <SquarePlus size={15} className="text-ink" /> <span className="font-bold">״הוסף למסך הבית״</span>
+          <li className="flex items-start gap-2">
+            <span className="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-extrabold text-white">2</span>
+            <span className="min-w-0">
+              גללו למטה ובחרו <span className="font-bold">״הוסף למסך הבית״</span> (Add to Home Screen){' '}
+              <SquarePlus size={15} className="inline align-text-bottom text-ink" />
             </span>
           </li>
         </ol>

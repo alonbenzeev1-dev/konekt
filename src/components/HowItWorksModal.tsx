@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { MapPin, MessageCircle, UserCheck, type LucideIcon } from 'lucide-react';
 
 export const GUIDE_KEY = 'konekt_seen_guide_v1';
@@ -43,14 +43,16 @@ const SLIDES: { Icon: LucideIcon; tab: string; title: string; body: string }[] =
 /** 3-slide first-run walkthrough. `onClose` fires on skip, finish, or Escape. */
 export function HowItWorksModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [i, setI] = useState(0);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose; // a new onClose must not restart the slides
 
   useEffect(() => {
     if (!open) return;
     setI(0);
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onCloseRef.current();
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
   const last = i === SLIDES.length - 1;
