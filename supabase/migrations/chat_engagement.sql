@@ -110,14 +110,15 @@ returns text
 language plpgsql volatile security definer set search_path = public
 as $$
 declare
-  base       text := replace(coalesce(p_emoji, ''), E'️', '');
+  base       text := replace(coalesce(p_emoji, ''), chr(65039), '');
   cur        text;
   had_row    boolean;
   next_emoji text;
 begin
   if auth.uid() is null then raise exception 'not authenticated'; end if;
   if (p_message is null) = (p_group_message is null) then raise exception 'one message required'; end if;
-  if base <> all (array['👍', '❤', '🔥', '😂', '🙌', '☕']) then raise exception 'bad emoji'; end if;
+  -- the six quick reactions (thumbs up, red heart, fire, joy, raised hands, coffee), as code points so nothing invisible can get lost in a copy-paste
+  if base <> all (array[chr(128077), chr(10084), chr(128293), chr(128514), chr(128588), chr(9749)]) then raise exception 'bad emoji'; end if;
 
   if p_message is not null then
     if not exists (select 1 from public.messages m join public.chats c on c.id = m.chat_id
@@ -126,7 +127,7 @@ begin
     end if;
     select r.emoji into cur from public.message_reactions r where r.message_id = p_message and r.user_id = auth.uid();
     had_row := found;
-    next_emoji := case when had_row and replace(coalesce(cur, ''), E'️', '') = base then null else p_emoji end;
+    next_emoji := case when had_row and replace(coalesce(cur, ''), chr(65039), '') = base then null else p_emoji end;
     if had_row then
       update public.message_reactions set emoji = next_emoji where message_id = p_message and user_id = auth.uid();
     else
@@ -141,7 +142,7 @@ begin
     end if;
     select r.emoji into cur from public.message_reactions r where r.group_message_id = p_group_message and r.user_id = auth.uid();
     had_row := found;
-    next_emoji := case when had_row and replace(coalesce(cur, ''), E'️', '') = base then null else p_emoji end;
+    next_emoji := case when had_row and replace(coalesce(cur, ''), chr(65039), '') = base then null else p_emoji end;
     if had_row then
       update public.message_reactions set emoji = next_emoji where group_message_id = p_group_message and user_id = auth.uid();
     else
