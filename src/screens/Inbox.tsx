@@ -86,7 +86,7 @@ export function Inbox({ myId, inbox, onOpenChat }: Props) {
       {links.length > 0 && (
         <Section title="חיבורים שאושרו">
           {links.map((r) => (
-            <LinkCard key={r.id} req={r} myId={myId} person={people[r.sender_id === myId ? r.receiver_id : r.sender_id]} />
+            <LinkCard key={r.id} req={r} myId={myId} person={people[r.sender_id === myId ? r.receiver_id : r.sender_id]} inbox={inbox} now={now} />
           ))}
         </Section>
       )}
@@ -212,15 +212,41 @@ function IncomingCard({
   );
 }
 
-function LinkCard({ req, myId, person }: { req: ConnectionRequest; myId: string; person?: PublicProfile }) {
+function LinkCard({
+  req,
+  myId,
+  person,
+  inbox,
+  now,
+}: {
+  req: ConnectionRequest;
+  myId: string;
+  person?: PublicProfile;
+  inbox: InboxData;
+  now: number;
+}) {
   const iSent = req.sender_id === myId;
+  const [asking, setAsking] = useState(false);
+  // Approved requests are one-way. Offer the reverse if I have no live request back for this platform.
+  const askedBack = inbox.requests.some(
+    (x) =>
+      x.sender_id === myId && x.receiver_id === req.sender_id && x.kind === req.kind &&
+      (x.status === 'accepted' || (x.status === 'pending' && msLeft(x.expires_at, now) > 0)),
+  );
+  const askBack = async () => {
+    setAsking(true);
+    const { error } = await inbox.sendRequest(req.sender_id, req.kind);
+    setAsking(false);
+    if (error) toast(error.includes('no ') ? `${person?.first_name ?? 'המשתמש'} לא הוסיף/ה ${kindLabel[req.kind]}` : 'לא הצלחנו לשלוח את הבקשה', 'error');
+    else toast(`בקשת ${kindLabel[req.kind]} נשלחה ל${person?.first_name ?? ''}`, 'success');
+  };
   const { link, state } = useConnectionLink(iSent ? req.id : null);
 
   if (iSent && (state === 'unavailable' || state === 'error')) return null;
   const label = kindLabel[req.kind];
 
   return (
-    <li className="card flex items-center gap-3 rounded-2xl p-3">
+    <li className="card flex flex-wrap items-center gap-3 rounded-2xl p-3">
       <Avatar url={person?.avatar_url ?? null} name={person?.first_name ?? '…'} size={48} />
       <div className="min-w-0 flex-1">
         <p className="font-bold text-ink">{person?.first_name ?? '…'}</p>
@@ -247,6 +273,18 @@ function LinkCard({ req, myId, person }: { req: ConnectionRequest; myId: string;
         ) : (
           <Loader2 size={18} className="animate-spin text-muted" />
         ))}
+      {!iSent && !askedBack && (
+        <button
+          onClick={askBack}
+          disabled={asking}
+          className={`flex w-full items-center justify-center gap-1.5 rounded-xl py-2.5 text-sm font-bold text-white disabled:opacity-60 ${
+            req.kind === 'linkedin' ? 'bg-[#0A66C2]' : 'bg-gradient-to-tr from-[#F58529] via-[#DD2A7B] to-[#8134AF]'
+          }`}
+        >
+          {asking ? <Loader2 size={16} className="animate-spin" /> : req.kind === 'linkedin' ? <Linkedin size={16} /> : <Instagram size={16} />}
+          {`בקש גם את ה-${label} חזרה`}
+        </button>
+      )}
     </li>
   );
 }
