@@ -118,12 +118,16 @@ function IncomingCard({
 
   const approve = async (shareBack: boolean) => {
     setBusy(shareBack ? 'both' : 'yes');
-    const { error, chatId, mutual } = await inbox.respond(req.id, shareBack);
+    const { error, chatId, mutual, exchangeUnavailable } = await inbox.respond(req.id, shareBack);
     setBusy(null);
-    if (error) return toast('הבקשה כבר לא בתוקף', 'error');
+    if (error) {
+      return toast(error.includes('already handled') ? 'הבקשה כבר לא בתוקף' : 'לא הצלחנו לאשר. בדקו חיבור ונסו שוב.', 'error');
+    }
     if (req.kind === 'chat') {
       toast(`הצ׳אט עם ${name} פתוח ל-24 שעות`, 'success');
       if (chatId) onOpenChat(chatId);
+    } else if (exchangeUnavailable) {
+      toast(`${name} יכול/ה עכשיו לראות את ה-${kindLabel[req.kind]} שלך. השיתוף ההדדי עוד לא פעיל. אפשר לבקש חזרה.`, 'info');
     } else if (mutual) {
       toast(`שיתפתם זה עם זה. אפשר לפתוח את ה-${kindLabel[req.kind]} של ${name} ב״חיבורים שאושרו״`, 'success');
     } else {
@@ -227,9 +231,7 @@ function LinkCard({
     if (error) toast(error.includes('no ') ? `${person?.first_name ?? 'המשתמש'} לא הוסיף/ה ${kindLabel[req.kind]}` : 'לא הצלחנו לשלוח את הבקשה', 'error');
     else toast(`בקשת ${kindLabel[req.kind]} נשלחה ל${person?.first_name ?? ''}`, 'success');
   };
-  const { link, state } = useConnectionLink(iSent ? req.id : null);
-
-  if (iSent && (state === 'unavailable' || state === 'error')) return null;
+  const { link, state, retry } = useConnectionLink(iSent ? req.id : null);
   const label = kindLabel[req.kind];
 
   return (
@@ -255,6 +257,12 @@ function LinkCard({
             {req.kind === 'linkedin' ? <Linkedin size={16} /> : <Instagram size={16} />}
             {req.kind === 'linkedin' ? 'פתח פרופיל ב-LinkedIn להוספה ↗' : 'פתח פרופיל ב-Instagram ↗'}
           </a>
+        ) : state === 'error' ? (
+          <button onClick={retry} className="btn-ghost flex w-full items-center justify-center gap-1.5 py-2 text-sm font-bold text-ink">
+            הקישור לא נטען · נסו שוב
+          </button>
+        ) : state === 'unavailable' ? (
+          <p className="w-full rounded-xl bg-bg px-3 py-2 text-center text-xs text-muted">הקישור כבר לא זמין (ייתכן ש{person?.first_name ?? 'המשתמש'} הסיר/ה אותו)</p>
         ) : (
           <Loader2 size={18} className="animate-spin text-muted" />
         ))}

@@ -5,7 +5,7 @@ import { PhotoPicker } from '../components/PhotoPicker';
 import { LinkFields } from '../components/LinkFields';
 import { supabase } from '../lib/supabase';
 import { normalizeInstagram, normalizeLinkedIn } from '../lib/social';
-import { importLinkedInAvatar, upsertProfile, uploadAvatar } from '../lib/profile';
+import { importLinkedInAvatar, isInvalidLinkError, upsertProfile, uploadAvatar } from '../lib/profile';
 import { requestGeoPermission } from '../lib/geo';
 import { requestNotificationPermission, subscribeToPush, toast } from '../lib/notify';
 import type { MyProfile } from '../lib/types';
@@ -77,7 +77,7 @@ export function CompleteProfile({ uid, initialName, linkedinPicture, onDone }: P
       onDone(profile);
     } catch (e) {
       console.error(e);
-      toast('משהו השתבש — נסו שוב', 'error');
+      toast(isInvalidLinkError(e) ? 'הקישור ל-LinkedIn לא תקין. הדביקו קישור בפורמט linkedin.com/in/השם-שלכם' : 'משהו השתבש — נסו שוב', 'error');
       setBusy(null);
     }
   };

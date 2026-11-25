@@ -28,5 +28,6 @@ Commands: `npm run dev`, `npm run build` (`tsc -b && vite build`; must be clean 
 - Blocks are mutual, permanent and silent.
 
 ## Conventions
+- Profile links are stored canonical: `https://www.linkedin.com/in/<slug>` and a bare Instagram handle (DB check constraints enforce it). Always go through `normalizeLinkedIn` / `normalizeInstagram` on input and `safeProfileUrl` before putting a server value in an `<a href>` (src/lib/social.ts).
 - Source files use CRLF line endings.
 - `.env.local` holds Supabase keys and must never be committed (`.env.example` is the template).

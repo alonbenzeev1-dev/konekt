@@ -49,6 +49,9 @@ export async function importLinkedInAvatar(uid: string, pictureUrl: string | nul
   }
 }
 
+/** Postgres check_violation (23514): e.g. a link that is not in the canonical https://www.linkedin.com/in/<slug> form. */
+export const isInvalidLinkError = (e: unknown) => typeof e === 'object' && e !== null && (e as { code?: string }).code === '23514';
+
 export interface ProfileInput {
   first_name: string;
   headline: string | null;

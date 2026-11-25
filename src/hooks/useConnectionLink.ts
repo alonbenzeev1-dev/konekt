@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { safeProfileUrl } from '../lib/social';
 
 /**
  * loading     — asking the server
@@ -31,7 +32,7 @@ export function useConnectionLink(requestId: string | null) {
     supabase.rpc('get_connection_link', { request_id: requestId }).then(({ data, error }) => {
       if (cancelled) return;
       if (error) console.warn('connection link failed', error.message);
-      const link = !error && typeof data === 'string' ? data : null;
+      const link = !error && typeof data === 'string' ? safeProfileUrl(data) : null; // never hand a raw string to an <a href>
       setResult({ requestId, link, state: error ? 'error' : link ? 'ready' : 'unavailable' });
     });
     return () => {

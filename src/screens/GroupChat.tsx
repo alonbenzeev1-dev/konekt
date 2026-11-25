@@ -4,6 +4,7 @@ import { Avatar } from '../components/Avatar';
 import { BottomSheet } from '../components/BottomSheet';
 import { AddMembersSheet, type GroupCandidate } from '../components/CreateGroupSheet';
 import { toast } from '../lib/notify';
+import { instagramUrl, normalizeInstagram, safeProfileUrl } from '../lib/social';
 import { formatClock } from '../lib/time';
 import { MAX_GROUP_MEMBERS, type GroupsData } from '../hooks/useGroups';
 
@@ -203,9 +204,9 @@ export function GroupChat({ myId, groupId, groups, candidates, onBack }: Props) 
                 {m.headline && <span className="block truncate text-xs text-muted">{m.headline}</span>}
               </span>
               <span className="flex shrink-0 items-center gap-1.5">
-                {m.linkedin_url && (
+                {safeProfileUrl(m.linkedin_url) && (
                   <a
-                    href={m.linkedin_url}
+                    href={safeProfileUrl(m.linkedin_url) as string}
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label={`LinkedIn של ${m.first_name}`}
@@ -214,9 +215,9 @@ export function GroupChat({ myId, groupId, groups, candidates, onBack }: Props) 
                     <Linkedin size={17} />
                   </a>
                 )}
-                {m.instagram_handle && (
+                {normalizeInstagram(m.instagram_handle ?? '') && (
                   <a
-                    href={`https://instagram.com/${m.instagram_handle}`}
+                    href={instagramUrl(normalizeInstagram(m.instagram_handle ?? '') as string)}
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label={`Instagram של ${m.first_name}`}

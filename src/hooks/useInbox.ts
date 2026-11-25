@@ -164,8 +164,18 @@ export function useInbox(userId: string | null) {
    * other's profile; `mutual` tells whether that actually happened. For a chat request, returns the chat id.
    */
   const respond = useCallback(
-    async (requestId: string, shareBack = false): Promise<Result & { chatId?: string; mutual?: boolean }> => {
-      const { data, error } = await supabase.rpc('respond_request', { request_id: requestId, accept: true, share_back: shareBack });
+    async (requestId: string, shareBack = false): Promise<Result & { chatId?: string; mutual?: boolean; exchangeUnavailable?: boolean }> => {
+      // Plain approvals send no share_back at all, so they work against both the old and the new SQL function.
+      let res = shareBack
+        ? await supabase.rpc('respond_request', { request_id: requestId, accept: true, share_back: true })
+        : await supabase.rpc('respond_request', { request_id: requestId, accept: true });
+      let exchangeUnavailable = false;
+      if (res.error && shareBack && (res.error.code === 'PGRST202' || /could not find the function/i.test(res.error.message))) {
+        // the mutual_approval migration has not been applied yet: still approve, one-way
+        exchangeUnavailable = true;
+        res = await supabase.rpc('respond_request', { request_id: requestId, accept: true });
+      }
+      const { data, error } = res;
       if (error) return { error: error.message };
       const req = data as ConnectionRequest;
       setRequests((prev) => prev.map((x) => (x.id === req.id ? req : x)));
@@ -174,7 +184,7 @@ export function useInbox(userId: string | null) {
         const chat = chs.find((c) => c.user_a === req.sender_id || c.user_b === req.sender_id);
         return { error: null, chatId: chat?.id };
       }
-      if (!shareBack) return { error: null };
+      if (!shareBack || exchangeUnavailable) return { error: null, exchangeUnavailable };
       // the reciprocal approved request is created server-side (only if they have that link): pull it in
       await load();
       const { data: back } = await supabase
@@ -184,6 +194,7 @@ export function useInbox(userId: string | null) {
         .eq('receiver_id', req.sender_id)
         .eq('kind', req.kind)
         .eq('status', 'accepted')
+        .gte('created_at', new Date(Date.now() - 48 * 3600_000).toISOString())
         .limit(1);
       return { error: null, mutual: !!back?.length };
     },

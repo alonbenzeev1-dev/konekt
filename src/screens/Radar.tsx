@@ -183,7 +183,16 @@ function PersonSheet({
     const { error } = await inbox.sendRequest(user.id, k, k === 'chat' ? first : undefined);
     setSending(null);
     if (error) {
-      toast(error.includes('chat already open') ? 'כבר יש ביניכם צ׳אט פתוח' : 'לא הצלחנו לשלוח את הבקשה', 'error');
+      toast(
+        error.includes('chat already open')
+          ? 'כבר יש ביניכם צ׳אט פתוח'
+          : /no (linkedin|instagram)/.test(error)
+            ? `${user.first_name} עדיין לא הוסיף/ה ${kindLabel[k as 'linkedin' | 'instagram']}`
+            : error.includes('user unavailable')
+              ? `${user.first_name} כבר לא זמין/ה`
+              : 'לא הצלחנו לשלוח את הבקשה',
+        'error',
+      );
       return;
     }
     try { navigator.vibrate?.(30); } catch { /* noop */ }

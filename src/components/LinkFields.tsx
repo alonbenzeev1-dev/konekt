@@ -34,7 +34,7 @@ function PrefixInput({
   prefix: string;
   icon: React.ReactNode;
   error?: boolean;
-} & React.InputHTMLAttributes<HTMLInputElement>) {
+} & React.ComponentPropsWithRef<'input'>) {
   return (
     <div
       dir="ltr"
@@ -55,6 +55,7 @@ function PrefixInput({
 
 export function LinkFields(p: Props) {
   const openedLinkedin = useRef(false);
+  const inputRef = useRef<HTMLInputElement>(null);
   const lastAuto = useRef('');
   const { linkedin, onLinkedin, autoCapture } = p;
   const linkedinValid = !!normalizeLinkedIn(linkedin);
@@ -84,15 +85,22 @@ export function LinkFields(p: Props) {
     };
   }, [autoCapture, linkedinValid, onLinkedin]);
 
+  // iOS Safari / WebViews often refuse clipboard reads (or the user dismisses the "Paste" bubble):
+  // never fail silently, put the cursor in the field so a long-press → Paste works.
+  const pasteByHand = (msg: string) => {
+    toast(msg, 'info');
+    inputRef.current?.focus();
+  };
+
   const pasteCopied = async () => {
     let text = '';
     try {
       text = await navigator.clipboard.readText();
     } catch {
-      return toast('אין גישה ללוח. הדביקו את הקישור ידנית בשדה.', 'error');
+      return pasteByHand('הדפדפן לא מרשה לקרוא את הלוח. לחצו בשדה והדביקו (לחיצה ארוכה ← הדבק).');
     }
     const url = extractLinkedIn(text);
-    if (!url) return toast('לא מצאנו קישור לפרופיל LinkedIn בלוח. העתיקו אותו ונסו שוב.', 'error');
+    if (!url) return pasteByHand('לא מצאנו קישור LinkedIn בלוח. העתיקו אותו מהאפליקציה ונסו שוב, או הדביקו בשדה.');
     onLinkedin(url);
     toast('הקישור הודבק', 'success');
   };
@@ -147,6 +155,7 @@ export function LinkFields(p: Props) {
 
         <PrefixInput
           prefix="linkedin.com/in/"
+          ref={inputRef}
           icon={<Linkedin size={17} className="text-[#0A66C2]" />}
           error={p.linkedinError}
           inputMode="url"

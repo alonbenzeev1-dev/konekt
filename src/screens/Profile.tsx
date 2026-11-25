@@ -7,7 +7,7 @@ import { VisibilityToggle } from '../components/VisibilityToggle';
 import { supabase } from '../lib/supabase';
 import { toast } from '../lib/notify';
 import { normalizeInstagram, normalizeLinkedIn } from '../lib/social';
-import { uploadAvatar, upsertProfile } from '../lib/profile';
+import { isInvalidLinkError, uploadAvatar, upsertProfile } from '../lib/profile';
 import type { MyProfile } from '../lib/types';
 
 interface Props {
@@ -74,8 +74,8 @@ export function Profile({ profile, onProfile, visible, onToggle, onSignedOut }: 
       });
       onProfile(p);
       toast('נשמר', 'success');
-    } catch {
-      toast('השמירה נכשלה', 'error');
+    } catch (e) {
+      toast(isInvalidLinkError(e) ? 'הקישור לא תקין. הדביקו קישור בפורמט linkedin.com/in/השם-שלכם' : 'השמירה נכשלה', 'error');
     } finally {
       setSaving(false);
     }
