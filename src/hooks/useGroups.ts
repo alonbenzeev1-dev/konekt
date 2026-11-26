@@ -29,6 +29,8 @@ export interface InvitePreview {
   member_count: number;
   already_member: boolean;
   group_id: string | null;
+  /** The creator closed the room to new joins. Missing until wave1_radar_invites.sql is applied. */
+  locked?: boolean;
 }
 
 export interface GroupSummary {
@@ -456,6 +458,31 @@ export function useGroups(userId: string | null, activeGroupId: string | null) {
     return { error: null };
   }, []);
 
+  /** Creator only: a new invite code. Old links and QR codes stop working at once. */
+  const resetInvite = useCallback(async (groupId: string): Promise<Result> => {
+    const { data, error } = await supabase.rpc('reset_group_invite', { grp: groupId });
+    if (error || typeof data !== 'string') {
+      toast('לא הצלחנו לאפס את הקישור', 'error');
+      return { error: error?.message ?? 'bad answer' };
+    }
+    setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, invite_code: data } : g)));
+    return { error: null };
+  }, []);
+
+  /** Creator only: close / open the room to new joins through the link. */
+  const setInvitesLocked = useCallback(async (groupId: string, locked: boolean): Promise<Result> => {
+    const before = groupsRef.current.find((g) => g.id === groupId)?.invites_locked ?? false;
+    const put = (v: boolean) => setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, invites_locked: v } : g)));
+    put(locked);
+    const { error } = await supabase.rpc('set_group_invites_locked', { grp: groupId, locked });
+    if (error) {
+      put(before);
+      toast('לא הצלחנו לעדכן את הנעילה', 'error');
+      return { error: error.message };
+    }
+    return { error: null };
+  }, []);
+
   const summaries = useMemo<GroupSummary[]>(
     () =>
       groups
@@ -490,6 +517,8 @@ export function useGroups(userId: string | null, activeGroupId: string | null) {
     createPoll,
     votePoll,
     pinMessage,
+    resetInvite,
+    setInvitesLocked,
     refresh: load,
     refreshMembers: loadMembers,
   };

@@ -1,6 +1,6 @@
 # Konekt
 
-Proximity networking PWA (Hebrew, RTL): see who is within ~75 m, then request a chat, LinkedIn or Instagram.
+Proximity networking PWA (Hebrew, RTL): see who is within 400 m (active in the last 45 min), then request a chat, LinkedIn or Instagram.
 
 ## Stack
 React 19 + TypeScript (strict) + Vite 6 + Tailwind 4, lucide-react icons, Supabase (Postgres/RLS, Realtime, Storage, Edge Functions). Deployed on Vercel from `main`.
@@ -17,6 +17,7 @@ Commands: `npm run dev`, `npm run build` (`tsc -b && vite build`; must be clean 
 - `supabase/migrations/mutual_approval.sql` respond_request(request_id, accept, share_back)
 - `supabase/migrations/rooms_invites.sql` groups become rooms: description + place, invite_code (QR / ?join=<code>), 200 members, LinkedIn cards (share_linkedin_in_group), separate share_instagram
 - `supabase/migrations/chat_engagement.sql` message_reactions (direct + room, one per person), quick polls (group_polls / options / votes), groups.pinned_message_id, realtime publication; all writes via RPCs (react_to_message, create_group_poll, vote_group_poll, pin_group_message)
+- `supabase/migrations/wave1_radar_invites.sql` get_nearby_users (400 m, 45 min, active_minutes), get_campus_count (400 m-2 km), konekt_cleanup (wipes coordinates after 45 min), groups.invites_locked + reset_group_invite / set_group_invites_locked, preview/join respect the lock
 - `supabase/migrations/current_intent.sql` profiles.current_intent (+ current_intent_at set by a trigger); get_nearby_users / get_group_members / get_public_profiles return it while fresh (8 h)
 - `supabase/migrations/campus_tags.sql` profiles.tags (max 3) + get_nearby_users returning tags
 - `supabase/functions/` import-avatar, push
@@ -29,6 +30,9 @@ Commands: `npm run dev`, `npm run build` (`tsc -b && vite build`; must be clean 
 - To get the other person's link back, the receiver must send their own request ("בקש גם ... חזרה" on the Inbox link card).
 - The client loads only the last 48 h of requests, so approved links older than that disappear from the UI.
 - Blocks are mutual, permanent and silent.
+
+## Radar
+- Main list: 400 m, last seen within 45 min. "קצת יותר רחוק" = 400 m to 2 km (a count only). Cards show a label, never meters: <=60 m "ממש לידך", <=150 m "בבניין / באזור", else "בקמפוס"; plus "פעיל עכשיו" (<=10 min) or "לפני X דק׳". Constants: RADIUS_M / CAMPUS_RADIUS_M in useNearby.ts; the 400 and 45 also live in wave1_radar_invites.sql.
 
 ## Live status ("מה הקטע שלך כרגע?")
 - Max 60 chars, shown on nearby cards, in room member lists and as a one-tap opener (fills the message box, never sends). It expires 8 h after it was set: the 8 h lives in current_intent.sql and in INTENT_TTL_MS (src/lib/intent.ts). Edit it with <TypewriterInput> (typewriter placeholder; respects reduced motion).

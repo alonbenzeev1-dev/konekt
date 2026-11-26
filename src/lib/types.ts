@@ -36,6 +36,8 @@ export interface NearbyUser extends PublicProfile {
   has_linkedin: boolean;
   has_instagram: boolean;
   distance_m: number;
+  /** Minutes since they were last seen (the radar only lists the last 45). */
+  active_minutes?: number;
 }
 
 export interface ConnectionRequest {
@@ -76,6 +78,8 @@ export interface Group {
   location_tag?: string | null;
   /** The secret in ?join=<code>. */
   invite_code?: string;
+  /** While true, nobody new can join through the link / QR (the creator toggles it). */
+  invites_locked?: boolean;
   /** One message pinned at the top of the room (only the creator sets it). */
   pinned_message_id?: string | null;
 }

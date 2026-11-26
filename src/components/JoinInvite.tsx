@@ -30,7 +30,7 @@ export function JoinInvite({ groups, onJoined }: { groups: GroupsData; onJoined:
     const { error, id } = await groups.joinByCode(c);
     setJoining(false);
     if (error || !id) {
-      toast(error?.includes('too many') ? 'החדר מלא' : error?.includes('not found') ? 'קישור ההזמנה לא תקף' : 'לא הצלחנו להצטרף. נסו שוב.', 'error');
+      toast(error?.includes('locked') ? 'החדר סגור להצטרפות חדשה' : error?.includes('too many') ? 'החדר מלא' : error?.includes('not found') ? 'קישור ההזמנה לא תקף' : 'לא הצלחנו להצטרף. נסו שוב.', 'error');
       finish();
       return;
     }
@@ -52,6 +52,10 @@ export function JoinInvite({ groups, onJoined }: { groups: GroupsData; onJoined:
       if (p.already_member && p.group_id) {
         finish();
         return onJoined(p.group_id);
+      }
+      if (p.locked) {
+        toast('החדר סגור להצטרפות חדשה. בקשו מיוצר/ת החדר לפתוח אותו.', 'error');
+        return finish();
       }
       if (isJoinAuto()) return void join();
       setPreview(p);

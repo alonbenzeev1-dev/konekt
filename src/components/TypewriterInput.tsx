@@ -87,7 +87,7 @@ export function TypewriterInput({ value, onChange, id, ariaLabel, phrases = INTE
         autoComplete="off"
         maxLength={maxLength}
         value={value}
-        dir="auto"
+        dir="rtl"
         aria-label={ariaLabel}
         placeholder={hint}
         onFocus={() => setFocused(true)}
@@ -99,7 +99,7 @@ export function TypewriterInput({ value, onChange, id, ariaLabel, phrases = INTE
             onSubmit?.();
           }
         }}
-        className={`field text-base ${className}`}
+        className={`field text-right text-base ${className}`}
       />
       {nearLimit && (
         <p dir="ltr" className={`mt-1 text-end text-[11px] tabular-nums ${value.length >= maxLength ? 'font-bold text-danger' : 'text-muted'}`}>

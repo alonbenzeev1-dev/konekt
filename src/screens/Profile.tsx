@@ -205,7 +205,7 @@ export function Profile({ profile, onProfile, visible, onToggle, onSignedOut }: 
       <section className="card flex items-center justify-between gap-3 rounded-3xl p-5">
         <div>
           <p className="font-bold text-ink">נראות בסביבה</p>
-          <p className="text-xs text-muted">{visible ? 'אנשים ברדיוס 75 מ׳ רואים אותך' : 'אף אחד לא רואה אותך כרגע'}</p>
+          <p className="text-xs text-muted">{visible ? 'אנשים ברדיוס 400 מ׳ רואים אותך' : 'אף אחד לא רואה אותך כרגע'}</p>
           <p className="mt-0.5 text-[11px] text-muted">השאר מיקום פעיל כדי שחברים בקמפוס יראו אותך</p>
         </div>
         <VisibilityToggle on={visible} onChange={onToggle} />

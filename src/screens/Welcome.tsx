@@ -12,7 +12,7 @@ const STEPS = [
 ];
 
 const POINTS = [
-  { Icon: MapPin, text: 'רואים מי נמצא עד 75 מטר ממך, עכשיו' },
+  { Icon: MapPin, text: 'רואים מי נמצא בקמפוס שלך, עכשיו (עד 400 מטר)' },
   { Icon: UserCheck, text: 'כל חיבור וצ׳אט רק באישור של שני הצדדים' },
   { Icon: Lock, text: 'הקישורים שלך נעולים עד שתאשרו' },
 ];

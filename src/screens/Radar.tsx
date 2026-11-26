@@ -4,7 +4,7 @@ import { Avatar } from '../components/Avatar';
 import { TagChips } from '../components/TagChips';
 import { NearbySkeleton } from '../components/Skeleton';
 import { IntentBar } from '../components/IntentBar';
-import { StudentCard, ctaBase } from '../components/StudentCard';
+import { StudentCard, activityLabel, ctaBase, proximityLabel } from '../components/StudentCard';
 import { BottomSheet } from '../components/BottomSheet';
 import { useConnectionLink } from '../hooks/useConnectionLink';
 import { FEW_PEOPLE, RADIUS_M } from '../hooks/useNearby';
@@ -38,7 +38,7 @@ export function Radar({ myId, visible, onShow, geo, users, scanned, campusCount,
   const locating = visible && (geo === 'idle' || geo === 'locating');
 
   return (
-    <div className="px-4 pb-6">
+    <div className="px-4 pt-4 pb-6">
       <LiveStatusCard live={live} locating={locating} scanned={scanned} nearby={users.length} campusCount={campusCount} />
       {visible && <IntentBar saved={myIntent} onSave={onSaveIntent} />}
 
@@ -128,7 +128,7 @@ function LiveStatusCard({
     'לא פעיל כרגע'
   );
   return (
-    <section aria-live="polite" className="card card-elevated mt-1 mb-4 rounded-2xl p-4">
+    <section aria-live="polite" className="card card-elevated mb-4 rounded-2xl p-4">
       <div className="flex items-center gap-3">
         <span className="relative flex h-3.5 w-3.5 shrink-0 items-center justify-center">
           {live && <span className="absolute -inset-1.5 rounded-full bg-live/30 anim-ping" />}
@@ -143,7 +143,7 @@ function LiveStatusCard({
                 {campusCount != null && campusCount > 0 && (
                   <>
                     {' · '}
-                    <span className="whitespace-nowrap">{num(campusCount)} פעילים בקמפוס</span>
+                    <span className="whitespace-nowrap">{num(campusCount)} קצת יותר רחוק</span>
                   </>
                 )}
               </>
@@ -180,6 +180,7 @@ function NearbyCard({ user, myId, inbox, onOpen }: { user: NearbyUser; myId: str
       tags={user.tags}
       intent={user.current_intent}
       distanceM={user.distance_m}
+      activeMinutes={user.active_minutes}
       live
       onOpen={onOpen}
       cta={<ConnectCta user={user} myId={myId} inbox={inbox} onOpen={onOpen} />}
@@ -271,7 +272,7 @@ function RadarRings() {
   );
 }
 
-/** Nobody within 75m: set the scene, then make inviting one tap (native share sheet on a phone). */
+/** Nobody within 400m: set the scene, then make inviting one tap (native share sheet on a phone). */
 function EmptyRadar({ campusCount }: { campusCount: number | null }) {
   return (
     <div className="card card-elevated rounded-3xl px-5 pt-6 pb-5 text-center anim-card">
@@ -282,7 +283,7 @@ function EmptyRadar({ campusCount }: { campusCount: number | null }) {
       </p>
       {campusCount != null && campusCount > 0 && (
         <p className="mt-2 text-xs text-muted">
-          בינתיים, <span dir="ltr" className="font-bold tabular-nums text-ink">{campusCount}</span> פעילים בקמפוס, קצת יותר רחוק.
+          בינתיים, <span dir="ltr" className="font-bold tabular-nums text-ink">{campusCount}</span> פעילים קצת יותר רחוק (עד 2 ק״מ).
         </p>
       )}
       <button onClick={() => void inviteNearby(toast)} className="btn-primary mt-5 flex w-full items-center justify-center gap-2 py-3.5 text-base">
@@ -354,7 +355,7 @@ function PersonSheet({
           </p>
         )}
         <TagChips tags={user.tags} className="mt-2 justify-center" />
-        <p className="mt-1 text-xs font-bold text-primary">~{user.distance_m} מטר ממך</p>
+        <p className="mt-1 text-xs font-bold text-primary">{proximityLabel(user.distance_m)}{activityLabel(user.active_minutes) ? ` · ${activityLabel(user.active_minutes)}` : ''}</p>
       </div>
 
       {/* Chat (double opt-in: the first message is a request) */}

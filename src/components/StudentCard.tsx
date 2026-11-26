@@ -3,16 +3,24 @@ import type { ReactNode } from 'react';
 import { Avatar } from './Avatar';
 import { TagChips } from './TagChips';
 
-/** Friendly proximity next to the number (indoor GPS is fuzzy, so we never show more than "about"). */
-export const proximityLabel = (m: number) => (m <= 30 ? 'ממש לידך' : 'באזור שלך');
+/** Human proximity instead of raw meters: indoor GPS is fuzzy, and an exact number says more than we should. */
+export const proximityLabel = (m: number) => (m <= 60 ? 'ממש לידך' : m <= 150 ? 'בבניין / באזור' : 'בקמפוס');
 
-export function DistancePill({ meters }: { meters: number }) {
+/** "פעיל עכשיו" up to 10 minutes, then "לפני X דק׳" (the radar lists the last 45). null = unknown (the profile preview). */
+export const activityLabel = (mins?: number | null) => (mins == null ? null : mins <= 10 ? 'פעיל עכשיו' : `לפני ${mins} דק׳`);
+
+export function DistancePill({ meters, activeMinutes }: { meters: number; activeMinutes?: number | null }) {
+  const activity = activityLabel(activeMinutes);
   return (
     <span className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-primary-soft px-2.5 py-1 text-[11px] leading-none font-bold whitespace-nowrap text-cta-press">
       <span className="h-1.5 w-1.5 rounded-full bg-primary" />
       {proximityLabel(meters)}
-      <span aria-hidden className="opacity-40">·</span>
-      <span dir="ltr" className="tabular-nums">~{meters} מ׳</span>
+      {activity && (
+        <>
+          <span aria-hidden className="opacity-40">·</span>
+          <span className={activeMinutes != null && activeMinutes <= 10 ? '' : 'font-medium text-muted'}>{activity}</span>
+        </>
+      )}
     </span>
   );
 }
@@ -30,6 +38,8 @@ interface Props {
   /** Their live status ("מה הקטע שלך כרגע?"), when set. */
   intent?: string | null;
   distanceM: number;
+  /** Minutes since last seen (radar cards). */
+  activeMinutes?: number | null;
   live?: boolean;
   /** Makes the identity block tappable (the CTA below is separate). */
   onOpen?: () => void;
@@ -40,7 +50,7 @@ interface Props {
  * One student, exactly as others see them in סביבי. The profile preview renders this same component,
  * so "how you look" and "how you look to others" cannot drift apart.
  */
-export function StudentCard({ name, headline, headlineFallback, avatarUrl, tags, intent, distanceM, live, onOpen, cta }: Props) {
+export function StudentCard({ name, headline, headlineFallback, avatarUrl, tags, intent, distanceM, activeMinutes, live, onOpen, cta }: Props) {
   const identity = (
     <>
       <Avatar url={avatarUrl} name={name} size={60} live={live} />
@@ -61,7 +71,7 @@ export function StudentCard({ name, headline, headlineFallback, avatarUrl, tags,
           </span>
         )}
         <span className="mt-2 flex flex-wrap items-center gap-1.5">
-          <DistancePill meters={distanceM} />
+          <DistancePill meters={distanceM} activeMinutes={activeMinutes} />
         </span>
         <TagChips tags={tags} className="mt-1.5" />
       </span>

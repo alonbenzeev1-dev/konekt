@@ -559,7 +559,7 @@ export function GroupChat({ myId, groupId, groups, candidates, myLinks, onBack }
         slots={slots}
         onAdd={(ids) => groups.addMembers(groupId, ids)}
       />
-      {group && <InviteSheet open={showInvite} onClose={() => setShowInvite(false)} group={group} />}
+      {group && <InviteSheet open={showInvite} onClose={() => setShowInvite(false)} group={group} isCreator={isCreator} onReset={() => groups.resetInvite(group.id)} onLock={(v) => groups.setInvitesLocked(group.id, v)} />}
     </div>
   );
 }

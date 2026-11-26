@@ -4,8 +4,9 @@ import type { NearbyUser } from '../lib/types';
 import type { Coords } from './usePresence';
 
 const POLL_MS = 8_000;
-export const RADIUS_M = 75;
-export const CAMPUS_RADIUS_M = 1000;
+/** Main list: 400 m (indoor GPS drifts 150-350 m inside a building). "A bit further" = 400 m to 2 km. */
+export const RADIUS_M = 400;
+export const CAMPUS_RADIUS_M = 2000;
 /** Fewer than this many people nearby → show the campus count + invite. */
 export const FEW_PEOPLE = 3;
 
