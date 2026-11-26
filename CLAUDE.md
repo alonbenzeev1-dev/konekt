@@ -18,6 +18,7 @@ Commands: `npm run dev`, `npm run build` (`tsc -b && vite build`; must be clean 
 - `supabase/migrations/rooms_invites.sql` groups become rooms: description + place, invite_code (QR / ?join=<code>), 200 members, LinkedIn cards (share_linkedin_in_group), separate share_instagram
 - `supabase/migrations/chat_engagement.sql` message_reactions (direct + room, one per person), quick polls (group_polls / options / votes), groups.pinned_message_id, realtime publication; all writes via RPCs (react_to_message, create_group_poll, vote_group_poll, pin_group_message)
 - `supabase/migrations/wave1_radar_invites.sql` get_nearby_users (400 m, 45 min, active_minutes), get_campus_count (400 m-2 km), konekt_cleanup (wipes coordinates after 45 min), groups.invites_locked + reset_group_invite / set_group_invites_locked, preview/join respect the lock
+- `supabase/migrations/wave2_chat_indexes.sql` indexes on the RLS / filter columns (chats, messages, rooms, reactions, votes, radar) + realtime publication re-assert
 - `supabase/migrations/current_intent.sql` profiles.current_intent (+ current_intent_at set by a trigger); get_nearby_users / get_group_members / get_public_profiles return it while fresh (8 h)
 - `supabase/migrations/campus_tags.sql` profiles.tags (max 3) + get_nearby_users returning tags
 - `supabase/functions/` import-avatar, push
@@ -34,12 +35,15 @@ Commands: `npm run dev`, `npm run build` (`tsc -b && vite build`; must be clean 
 ## Radar
 - Main list: 400 m, last seen within 45 min. "קצת יותר רחוק" = 400 m to 2 km (a count only). Cards show a label, never meters: <=60 m "ממש לידך", <=150 m "בבניין / באזור", else "בקמפוס"; plus "פעיל עכשיו" (<=10 min) or "לפני X דק׳". Constants: RADIUS_M / CAMPUS_RADIUS_M in useNearby.ts; the 400 and 45 also live in wave1_radar_invites.sql.
 
+- Ranking (src/lib/ranking.ts, client-side): status +20 (+10 if it shares a keyword with mine), shared room +15, proximity 30 (flat to 60 m, 20 at 150, 5 at 400), freshness 20 (flat to 10 min, 0 at 45). Radar tiers: "במוקד עכשיו" (top 5 with a status or shared room, rich cards), filter pills, compact rows for the rest.
+
 ## Live status ("מה הקטע שלך כרגע?")
 - Max 60 chars, shown on nearby cards, in room member lists and as a one-tap opener (fills the message box, never sends). It expires 8 h after it was set: the 8 h lives in current_intent.sql and in INTENT_TTL_MS (src/lib/intent.ts). Edit it with <TypewriterInput> (typewriter placeholder; respects reduced motion).
 
 ## Chat engagement
 - Realtime: every table a chat listens to must be in the supabase_realtime publication. Never subscribe to DELETE on tables with RLS (Realtime does not filter DELETE): removing a reaction is an UPDATE to NULL, votes can only change.
 - Scrolling: useStickToBottom keeps you at the bottom only if you were already near it (or you sent the message); otherwise a "new messages" button appears.
+- Typing indicator: Realtime Broadcast (useTyping, channel typing:chat:<id> / typing:room:<id>), ephemeral, no DB. Anyone who knows the id could listen; the payload is only a user id.
 - Message actions (tap / long-press a bubble): six quick reactions, plus "pin" for the room creator.
 
 ## Rooms and invites

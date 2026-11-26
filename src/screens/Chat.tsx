@@ -7,6 +7,7 @@ import { Openable } from '../components/Openable';
 import { ReactionPills } from '../components/ReactionPills';
 import { useNow } from '../hooks/useNow';
 import { useStickToBottom } from '../hooks/useStickToBottom';
+import { useTyping } from '../hooks/useTyping';
 import { intentIcebreaker } from '../lib/intent';
 import { toast } from '../lib/notify';
 import { directKey, reactionPills } from '../lib/reactions';
@@ -38,6 +39,14 @@ export function Chat({ myId, chatId, inbox, onBack }: Props) {
 
   const msgs = useMemo(() => inbox.messages.filter((m) => m.chat_id === chatId), [inbox.messages, chatId]);
   const { mainRef, endRef, onScroll, unseen, jump } = useStickToBottom(msgs.length, msgs[msgs.length - 1]?.sender_id === myId);
+
+  const typing = useTyping(thread ? `chat:${chatId}` : null, myId);
+  const lastFrom = msgs[msgs.length - 1]?.sender_id;
+  const { clear: clearTyping } = typing;
+  useEffect(() => {
+    if (lastFrom && lastFrom !== myId) clearTyping(lastFrom); // their message arrived: they are done typing
+  }, [msgs.length, lastFrom, myId, clearTyping]);
+  const partnerTyping = open && !!thread && typing.typers.includes(thread.partnerId);
 
   // what they wrote as their status: a natural first line, offered until I have said something myself
   const partnerIntent = partner?.current_intent?.trim() || null;
@@ -111,10 +120,14 @@ export function Chat({ myId, chatId, inbox, onBack }: Props) {
         <Avatar url={partner?.avatar_url ?? null} name={name} size={40} live={open} />
         <div className="min-w-0 flex-1">
           <p className="truncate font-bold text-ink">{name}</p>
-          <p className="flex items-center gap-1 text-[11px] text-muted">
-            <Hourglass size={10} />
-            {open && thread ? `צ׳אט זמני · נמחק ${formatHoursLeft(msLeft(thread.chat.expires_at, now))}` : 'הצ׳אט נסגר'}
-          </p>
+          {partnerTyping ? (
+            <p role="status" className="text-[11px] font-bold text-cta-press motion-safe:animate-pulse">מקליד/ה…</p>
+          ) : (
+            <p className="flex items-center gap-1 text-[11px] text-muted">
+              <Hourglass size={10} />
+              {open && thread ? `צ׳אט זמני · נמחק ${formatHoursLeft(msLeft(thread.chat.expires_at, now))}` : 'הצ׳אט נסגר'}
+            </p>
+          )}
         </div>
         {open && (
           <button onClick={block} className="flex h-11 w-11 items-center justify-center rounded-full text-muted active:bg-bg" aria-label="חסימה">
@@ -222,7 +235,10 @@ export function Chat({ myId, chatId, inbox, onBack }: Props) {
           value={text}
           maxLength={1000}
           disabled={!open}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value);
+            if (e.target.value.trim()) typing.notify();
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();

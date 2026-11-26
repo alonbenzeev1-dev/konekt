@@ -16,6 +16,7 @@ import { useStickToBottom } from '../hooks/useStickToBottom';
 import { firstUrl, messagePreview } from '../lib/chatText';
 import { toast } from '../lib/notify';
 import { groupKey, reactionPills } from '../lib/reactions';
+import { useTyping } from '../hooks/useTyping';
 import { instagramUrl, normalizeInstagram, safeProfileUrl } from '../lib/social';
 import { formatClock } from '../lib/time';
 import { MAX_GROUP_MEMBERS, type GroupsData } from '../hooks/useGroups';
@@ -99,6 +100,14 @@ export function GroupChat({ myId, groupId, groups, candidates, myLinks, onBack }
   const isCreator = !!group && group.created_by === myId;
   const pinned = group?.pinned_message_id ? msgs.find((m) => m.id === group.pinned_message_id) : undefined;
   const { mainRef, endRef, onScroll, unseen, jump } = useStickToBottom(msgs.length, msgs[msgs.length - 1]?.sender_id === myId);
+  const typing = useTyping(group ? `room:${groupId}` : null, myId);
+  const lastFrom = msgs[msgs.length - 1]?.sender_id;
+  const { clear: clearTyping } = typing;
+  useEffect(() => {
+    if (lastFrom && lastFrom !== myId) clearTyping(lastFrom);
+  }, [msgs.length, lastFrom, myId, clearTyping]);
+  const typingNames = typing.typers.map((id) => byId.get(id)?.first_name).filter((n): n is string => !!n);
+  const typingLine = typingNames.length === 0 ? null : typingNames.length === 1 ? `${typingNames[0]} מקליד/ה…` : typingNames.length === 2 ? `${typingNames[0]} ו${typingNames[1]} מקלידים…` : 'כמה אנשים מקלידים…';
 
   const { refreshMembers } = groups;
   const openMembers = () => {
@@ -413,6 +422,10 @@ export function GroupChat({ myId, groupId, groups, candidates, myLinks, onBack }
         </div>
       )}
 
+      {typingLine && (
+        <p role="status" className="border-t border-line bg-card px-4 pt-1.5 text-[12px] font-bold text-cta-press motion-safe:animate-pulse">{typingLine}</p>
+      )}
+
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -447,7 +460,10 @@ export function GroupChat({ myId, groupId, groups, candidates, myLinks, onBack }
           value={text}
           maxLength={1000}
           disabled={!group}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value);
+            if (e.target.value.trim()) typing.notify();
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();

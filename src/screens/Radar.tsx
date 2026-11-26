@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from 'react';
-import { ArrowUpLeft, Check, Clock, EyeOff, Instagram, Linkedin, Loader2, MapPinOff, MessageCircle, Send, Share2, UserPlus } from 'lucide-react';
+import { useMemo, useState, type ReactNode } from 'react';
+import { ArrowUpLeft, Check, Clock, EyeOff, Instagram, Linkedin, Loader2, MapPinOff, MessageCircle, Send, Share2, UserPlus, Users } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
 import { TagChips } from '../components/TagChips';
 import { NearbySkeleton } from '../components/Skeleton';
@@ -10,10 +10,12 @@ import { useConnectionLink } from '../hooks/useConnectionLink';
 import { FEW_PEOPLE, RADIUS_M } from '../hooks/useNearby';
 import { toast } from '../lib/notify';
 import { intentIcebreaker } from '../lib/intent';
+import { matchesFilter, rankNearby, splitTiers, type NearbyFilter, type Ranked } from '../lib/ranking';
 import { findRequest, requestFailureText } from '../lib/requests';
 import { inviteNearby, kindLabel } from '../lib/social';
 import type { GeoStatus } from '../hooks/usePresence';
 import type { Inbox } from '../hooks/useInbox';
+import type { GroupsData } from '../hooks/useGroups';
 import type { ConnectionRequest, NearbyUser, Platform, RequestKind } from '../lib/types';
 
 interface Props {
@@ -26,14 +28,29 @@ interface Props {
   scanned: boolean;
   campusCount: number | null;
   inbox: Inbox;
+  groups: GroupsData;
   /** My own live status (null = none / expired) and how to change it. */
   myIntent: string | null;
   onSaveIntent: (value: string | null) => Promise<boolean>;
   onOpenChat: (chatId: string) => void;
 }
 
-export function Radar({ myId, visible, onShow, geo, users, scanned, campusCount, inbox, myIntent, onSaveIntent, onOpenChat }: Props) {
+export function Radar({ myId, visible, onShow, geo, users, scanned, campusCount, inbox, groups, myIntent, onSaveIntent, onOpenChat }: Props) {
   const [selected, setSelected] = useState<NearbyUser | null>(null);
+  const [filter, setFilter] = useState<NearbyFilter>('all');
+
+  // people who share at least one of my rooms
+  const sharedIds = useMemo(() => {
+    const s = new Set<string>();
+    for (const g of groups.groups) for (const m of groups.members[g.id] ?? []) if (m.member_id !== myId) s.add(m.member_id);
+    return s;
+  }, [groups.groups, groups.members, myId]);
+  const ranked = useMemo(() => rankNearby(users, { myIntent, sharedIds }), [users, myIntent, sharedIds]);
+  const counts = useMemo(
+    () => ({ all: ranked.length, intent: ranked.filter((r) => matchesFilter(r, 'intent')).length, room: ranked.filter((r) => matchesFilter(r, 'room')).length, close: ranked.filter((r) => matchesFilter(r, 'close')).length }),
+    [ranked],
+  );
+  const { spotlight, rest } = useMemo(() => splitTiers(ranked.filter((r) => matchesFilter(r, filter))), [ranked, filter]);
   const live = visible && geo === 'ok';
   const locating = visible && (geo === 'idle' || geo === 'locating');
 
@@ -63,13 +80,43 @@ export function Radar({ myId, visible, onShow, geo, users, scanned, campusCount,
         <>
           {users.length > 0 && (
             <>
-              <ul className="space-y-3">
-                {users.map((u, i) => (
-                  <li key={u.id} className="anim-card" style={{ animationDelay: `${Math.min(i, 8) * 35}ms` }}>
-                    <NearbyCard user={u} myId={myId} inbox={inbox} onOpen={() => setSelected(u)} />
-                  </li>
-                ))}
-              </ul>
+              {spotlight.length > 0 && (
+                <section aria-label="במוקד עכשיו">
+                  <h2 className="mb-2 flex items-center gap-2 text-sm font-extrabold text-ink">
+                    <span className="h-2 w-2 rounded-full bg-live" /> במוקד עכשיו
+                  </h2>
+                  <ul className="space-y-3">
+                    {spotlight.map((r, i) => (
+                      <li key={r.user.id} className="anim-card" style={{ animationDelay: `${Math.min(i, 8) * 35}ms` }}>
+                        {r.shared && (
+                          <p className="mb-1 flex w-fit items-center gap-1 rounded-full border border-line bg-card px-2.5 py-0.5 text-[11px] font-bold text-cta-press">
+                            <Users size={11} /> חדר משותף
+                          </p>
+                        )}
+                        <NearbyCard user={r.user} myId={myId} inbox={inbox} onOpen={() => setSelected(r.user)} />
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
+              <FilterBar value={filter} onChange={setFilter} counts={counts} />
+
+              {rest.length > 0 && (
+                <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-card" aria-label="בקמפוס">
+                  {rest.map((r) => (
+                    <li key={r.user.id}>
+                      <CompactRow ranked={r} onOpen={() => setSelected(r.user)} />
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {spotlight.length === 0 && rest.length === 0 && (
+                <div className="rounded-2xl border border-line bg-card px-4 py-6 text-center">
+                  <p className="text-sm font-bold text-ink">אף אחד לא מתאים לסינון הזה</p>
+                  <button onClick={() => setFilter('all')} className="btn-ghost mt-3 min-h-[44px] px-5 text-sm font-bold">הצג הכל</button>
+                </div>
+              )}
               <p className="mt-4 px-3 text-center text-[11px] leading-relaxed text-muted">
                 הקישורים נחשפים רק באישור. אם מי שאישר בוחר להחליף, גם הקישור שלך ייחשף אליו.
               </p>
@@ -171,6 +218,54 @@ function LiveStatusCard({
 }
 
 /** A student in the feed: identity (tap for details) + one clear action. */
+const FILTERS: { key: NearbyFilter; label: string }[] = [
+  { key: 'all', label: 'הכל' },
+  { key: 'intent', label: 'עם סטטוס' },
+  { key: 'room', label: 'מחדר משותף' },
+  { key: 'close', label: 'ממש לידך' },
+];
+
+/** One-tap filters: a horizontal row (44px tall hit areas, the visible pill is slimmer). */
+function FilterBar({ value, onChange, counts }: { value: NearbyFilter; onChange: (f: NearbyFilter) => void; counts: Record<NearbyFilter, number> }) {
+  return (
+    <div role="group" aria-label="סינון" className="-mx-4 mt-3 mb-1 flex gap-1.5 overflow-x-auto px-4 [scrollbar-width:none]">
+      {FILTERS.map((f) => {
+        const on = value === f.key;
+        return (
+          <button
+            key={f.key}
+            type="button"
+            aria-pressed={on}
+            onClick={() => onChange(f.key)}
+            className="flex h-11 shrink-0 items-center active:scale-[0.97]"
+          >
+            <span className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] font-bold transition-colors ${on ? 'border-cta bg-cta text-white' : 'border-line bg-card text-ink/80'}`}>
+              {f.label}
+              <span dir="ltr" className={`tabular-nums ${on ? 'text-white/80' : 'text-muted'}`}>{counts[f.key]}</span>
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** A scannable row: avatar, name, one line of headline (or their status), proximity. Tap for the full sheet. */
+function CompactRow({ ranked, onOpen }: { ranked: Ranked; onOpen: () => void }) {
+  const u = ranked.user;
+  const line = u.headline?.trim() || 'סטודנט/ית בקמפוס';
+  return (
+    <button onClick={onOpen} className="flex min-h-[64px] w-full items-center gap-3 px-3 py-2 text-start transition-colors active:bg-bg">
+      <Avatar url={u.avatar_url} name={u.first_name} size={44} live={(u.active_minutes ?? 99) <= 10} />
+      <span className="min-w-0 flex-1">
+        <span dir="auto" className="block truncate text-[15px] leading-snug font-bold text-ink">{u.first_name}</span>
+        <span dir="auto" className="block truncate text-[13px] leading-snug text-muted">{line}</span>
+      </span>
+      <span className="shrink-0 rounded-full bg-primary-soft px-2.5 py-1 text-[11px] leading-none font-bold whitespace-nowrap text-cta-press">{proximityLabel(u.distance_m)}</span>
+    </button>
+  );
+}
+
 function NearbyCard({ user, myId, inbox, onOpen }: { user: NearbyUser; myId: string; inbox: Inbox; onOpen: () => void }) {
   return (
     <StudentCard

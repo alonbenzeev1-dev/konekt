@@ -212,6 +212,7 @@ function Main({ profile, onProfile, onSignedOut }: { profile: MyProfile; onProfi
             scanned={scanned}
             campusCount={campusCount}
             inbox={inbox}
+            groups={groups}
             myIntent={activeIntent(profile)}
             onSaveIntent={saveIntent}
             onOpenChat={setChatId}
