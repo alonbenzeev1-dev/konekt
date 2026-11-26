@@ -111,6 +111,18 @@ function ConfiguredApp() {
   );
 }
 
+/** Where a notification link points: ?tab=chats|requests|profile and, for a message, &chat=<chat id>. */
+function parseDeepLink(href: string): { tab: Tab | null; chat: string | null } {
+  try {
+    const q = new URL(href, location.origin).searchParams;
+    const t = q.get('tab');
+    const chat = q.get('chat');
+    return { tab: t === 'chats' || t === 'requests' || t === 'profile' ? t : t === 'inbox' ? 'requests' : null, chat: chat && /^[0-9a-f-]{36}$/i.test(chat) ? chat : null };
+  } catch {
+    return { tab: null, chat: null };
+  }
+}
+
 function initialTab(): Tab {
   const t = new URLSearchParams(location.search).get('tab');
   if (t === 'chats' || t === 'requests' || t === 'profile') return t;
@@ -119,7 +131,7 @@ function initialTab(): Tab {
 
 function Main({ profile, onProfile, onSignedOut }: { profile: MyProfile; onProfile: (p: MyProfile) => void; onSignedOut: () => void }) {
   const [tab, setTab] = useState<Tab>(initialTab);
-  const [chatId, setChatId] = useState<string | null>(null);
+  const [chatId, setChatId] = useState<string | null>(() => parseDeepLink(location.href).chat);
   const [groupId, setGroupId] = useState<string | null>(null);
   const guide = useGuide(profile, onProfile); // first time in the app, remembered on the profile
   const visible = profile.is_visible;
@@ -134,6 +146,30 @@ function Main({ profile, onProfile, onSignedOut }: { profile: MyProfile; onProfi
   useEffect(() => {
     void subscribeToPush(profile.id);
   }, [profile.id]);
+
+  // the ?chat= of a tapped notification is used once: a reload should not reopen the chat
+  useEffect(() => {
+    const u = new URL(location.href);
+    if (u.searchParams.has('chat')) {
+      u.searchParams.delete('chat');
+      history.replaceState(history.state, '', u.pathname + u.search + u.hash);
+    }
+  }, []);
+
+  // a notification was tapped while the app was open: the service worker sends the link instead of reloading
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    const onMsg = (e: MessageEvent) => {
+      const d = e.data as { type?: string; url?: string } | null;
+      if (d?.type !== 'konekt:navigate' || typeof d.url !== 'string') return;
+      const { tab: t, chat } = parseDeepLink(d.url);
+      setGroupId(null);
+      if (t) setTab(t);
+      setChatId(chat);
+    };
+    navigator.serviceWorker.addEventListener('message', onMsg);
+    return () => navigator.serviceWorker.removeEventListener('message', onMsg);
+  }, []);
 
   const toggle = useCallback(
     async (on: boolean) => {

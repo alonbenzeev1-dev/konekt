@@ -84,25 +84,47 @@ function urlBase64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
   return out;
 }
 
-/** Subscribes to Web Push (only if a VAPID key is configured) and stores the subscription. */
-export async function subscribeToPush(userId: string) {
+/** Subscribes to Web Push (only if a VAPID key is configured) and stores the subscription. true = saved. */
+export async function subscribeToPush(userId: string): Promise<boolean> {
   const vapid = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined;
-  if (!vapid || !('serviceWorker' in navigator) || !('PushManager' in window)) return;
-  if (Notification.permission !== 'granted') return;
+  if (!vapid || !('serviceWorker' in navigator) || !('PushManager' in window)) return false;
+  if (!('Notification' in window) || Notification.permission !== 'granted') return false;
   try {
     const reg = await navigator.serviceWorker.ready;
     const sub =
       (await reg.pushManager.getSubscription()) ??
       (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(vapid) }));
     const json = sub.toJSON();
-    if (!json.endpoint || !json.keys) return;
-    await supabase.from('push_subscriptions').upsert({
-      endpoint: json.endpoint,
-      user_id: userId,
-      p256dh: json.keys.p256dh,
-      auth: json.keys.auth,
+    if (!json.endpoint || !json.keys?.p256dh || !json.keys.auth) return false;
+    // the RPC also moves a device that switched accounts; a plain upsert is refused by RLS for a row someone else owned
+    const { error } = await supabase.rpc('save_push_subscription', {
+      p_endpoint: json.endpoint,
+      p_p256dh: json.keys.p256dh,
+      p_auth: json.keys.auth,
+      p_user_agent: navigator.userAgent.slice(0, 300),
     });
+    if (!error) return true;
+    const { error: e2 } = await supabase.from('push_subscriptions').upsert(
+      { endpoint: json.endpoint, user_id: userId, p256dh: json.keys.p256dh, auth: json.keys.auth, user_agent: navigator.userAgent.slice(0, 300) },
+      { onConflict: 'endpoint' },
+    );
+    return !e2;
   } catch (e) {
     console.warn('push subscribe failed', e);
+    return false;
+  }
+}
+
+/** Turns push off on this device: unsubscribes the browser and forgets the row. */
+export async function unsubscribeFromPush(): Promise<void> {
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (!sub) return;
+    const endpoint = sub.endpoint;
+    await sub.unsubscribe();
+    await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint);
+  } catch (e) {
+    console.warn('push unsubscribe failed', e);
   }
 }

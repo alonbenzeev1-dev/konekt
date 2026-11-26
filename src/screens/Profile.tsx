@@ -7,6 +7,7 @@ import { CAMPUS_TAGS, MAX_TAGS } from '../lib/tags';
 import { TypewriterInput } from '../components/TypewriterInput';
 import { activeIntent } from '../lib/intent';
 import { VisibilityToggle } from '../components/VisibilityToggle';
+import { PushCard } from '../components/PushCard';
 import { supabase } from '../lib/supabase';
 import { toast } from '../lib/notify';
 import { normalizeInstagram, normalizeLinkedIn } from '../lib/social';
@@ -210,6 +211,8 @@ export function Profile({ profile, onProfile, visible, onToggle, onSignedOut }: 
         </div>
         <VisibilityToggle on={visible} onChange={onToggle} />
       </section>
+
+      <PushCard userId={profile.id} />
 
       <Feedback userId={profile.id} />
 

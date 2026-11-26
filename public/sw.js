@@ -1,5 +1,5 @@
 /* KONEKT service worker — app-shell cache + Web Push */
-const CACHE = 'konekt-v4'; // bump on every UI release: assets under /assets and /icons are cache-first, old caches are deleted on activate
+const CACHE = 'konekt-v5'; // bump on every UI release: assets under /assets and /icons are cache-first, old caches are deleted on activate
 const SHELL = ['/', '/manifest.webmanifest', '/favicon.svg', '/icons/icon-192.png', '/icons/icon.svg'];
 
 self.addEventListener('install', (event) => {
@@ -41,33 +41,51 @@ self.addEventListener('fetch', (event) => {
   }
 });
 
-// Web Push (sent by supabase/functions/push)
+// Web Push (sent by supabase/functions/send-push).
+// Two payload shapes arrive here:
+//  - standard:  { title, body, tag, url }
+//  - iOS 18.4+ Declarative Web Push: { web_push: 8030, notification: { title, body, navigate, tag, ... } }
+//    (Safari can show those by itself; when it hands one to us we show the same notification, same tag, so there is one.)
+function readPush(event) {
+  let d = {};
+  try { d = event.data ? event.data.json() : {}; } catch { d = { body: event.data ? event.data.text() : '' }; }
+  const n = d && d.web_push === 8030 && d.notification ? d.notification : d;
+  return {
+    title: n.title || d.title || 'KONEKT',
+    body: n.body || d.body || '',
+    tag: n.tag || d.tag || 'konekt',
+    url: n.navigate || n.url || d.url || '/?tab=chats',
+  };
+}
+
 self.addEventListener('push', (event) => {
-  let data = {};
-  try { data = event.data ? event.data.json() : {}; } catch { data = { body: event.data && event.data.text() }; }
-  const title = data.title || 'KONEKT';
+  const p = readPush(event);
   event.waitUntil(
-    self.registration.showNotification(title, {
-      body: data.body || '',
+    self.registration.showNotification(p.title, {
+      body: p.body,
       icon: '/icons/icon-192.png',
       badge: '/icons/icon-192.png',
       dir: 'rtl',
       lang: 'he',
-      tag: data.tag || 'konekt',
+      tag: p.tag,
       renotify: true,
       vibrate: [80, 40, 80],
-      data: { url: data.url || '/?tab=chats' },
+      data: { url: p.url },
     }),
   );
 });
 
+// Tap: focus the open app and tell it where to go (no reload); otherwise open the link.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const target = (event.notification.data && event.notification.data.url) || '/';
+  const raw = (event.notification.data && event.notification.data.url) || '/';
+  const target = new URL(raw, self.location.origin).href;
   event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
-      for (const c of list) {
-        if ('focus' in c) { c.navigate(target); return c.focus(); }
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (list) => {
+      const mine = list.find((c) => new URL(c.url).origin === self.location.origin);
+      if (mine) {
+        mine.postMessage({ type: 'konekt:navigate', url: target });
+        return mine.focus();
       }
       return self.clients.openWindow(target);
     }),

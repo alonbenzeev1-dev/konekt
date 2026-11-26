@@ -21,7 +21,8 @@ Commands: `npm run dev`, `npm run build` (`tsc -b && vite build`; must be clean 
 - `supabase/migrations/wave2_chat_indexes.sql` indexes on the RLS / filter columns (chats, messages, rooms, reactions, votes, radar) + realtime publication re-assert
 - `supabase/migrations/current_intent.sql` profiles.current_intent (+ current_intent_at set by a trigger); get_nearby_users / get_group_members / get_public_profiles return it while fresh (8 h)
 - `supabase/migrations/campus_tags.sql` profiles.tags (max 3) + get_nearby_users returning tags
-- `supabase/functions/` import-avatar, push
+- `supabase/functions/` import-avatar, send-push (Web Push; replaces the old `push`)
+- `supabase/migrations/push_subscriptions.sql` push_subscriptions (RLS own rows) + save_push_subscription RPC
 
 ## Request logic (one-way, 48h)
 - Other users' profile rows are never readable (RLS: own row only). Everything goes through SECURITY DEFINER RPCs.

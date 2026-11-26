@@ -18,6 +18,7 @@ import {
   type PersonConnection,
 } from '../lib/requests';
 import { kindLabel } from '../lib/social';
+import { PushPromptBanner } from '../components/PushCard';
 import { formatCountdown, formatHoursLeft, formatWhen, msLeft } from '../lib/time';
 import type { Inbox as InboxData } from '../hooks/useInbox';
 import type { ConnectionRequest, NearbyUser, Platform, PublicProfile, RequestKind } from '../lib/types';
@@ -48,6 +49,7 @@ export function RequestsScreen({ myId, inbox, myLinks, nearby, onOpenChat }: Pro
 
   return (
     <div className="space-y-5 px-4 pt-2 pb-6">
+      <PushPromptBanner userId={myId} hasRequests={requests.length > 0} />
       <Segmented
         label="סינון בקשות"
         fit="content"
